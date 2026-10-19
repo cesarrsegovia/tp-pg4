@@ -1,0 +1,53 @@
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+
+        <div class="mb-4">
+            <h1 class="h2 mb-1">Nuevo autor</h1>
+            <p class="text-secondary mb-0">Completá el nombre y el apellido para registrar un autor.</p>
+        </div>
+
+        <div class="card shadow-sm">
+            <div class="card-body">
+                {{> errores}}
+
+                <form action="/autores" method="POST">
+{{> csrf}}
+                    <div class="mb-3">
+                        <label for="nombre" class="form-label">Nombre</label>
+                        <input
+                            type="text"
+                            id="nombre"
+                            name="nombre"
+                            class="form-control"
+                            maxlength="100"
+                            value="{{datos.nombre}}"
+                            required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="apellido" class="form-label">Apellido</label>
+                        <input
+                            type="text"
+                            id="apellido"
+                            name="apellido"
+                            class="form-control"
+                            maxlength="100"
+                            value="{{datos.apellido}}"
+                            required>
+                    </div>
+
+                    <div class="d-flex gap-2 mt-4">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-save me-1"></i>Guardar autor
+                        </button>
+
+                        <a href="/autores" class="btn btn-outline-secondary">
+                            <i class="bi bi-x-lg me-1"></i>Cancelar
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+    </div>
+</div>

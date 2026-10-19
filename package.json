@@ -1,0 +1,27 @@
+{
+  "name": "biblioteca",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "node pruebas/catalogos.js && node pruebas/entidades.js",
+    "db:schema": "node database/ejecutar.js database/schema.sql",
+    "db:seed": "node crearUsuario.js && node crearSocios.js && node crearAutoresCategorias.js && node crearEditoriales.js && node crearLibrosEjemplares.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "connect-flash": "^0.1.1",
+    "dotenv": "^18.0.5",
+    "express": "^5.2.1",
+    "express-handlebars": "^8.0.1",
+    "express-session": "^1.19.0",
+    "express-validator": "^7.3.2",
+    "passport": "^0.7.0",
+    "passport-local": "^1.0.0",
+    "pg": "^8.23.1"
+  }
+}

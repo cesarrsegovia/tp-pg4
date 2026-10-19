@@ -1,0 +1,12 @@
+{{#if errores}}
+<div class="alert alert-danger">
+    <p class="fw-bold mb-2">
+        <i class="bi bi-exclamation-triangle-fill me-1"></i>Revisá los siguientes errores:
+    </p>
+    <ul class="mb-0">
+        {{#each errores}}
+        <li>{{msg}}</li>
+        {{/each}}
+    </ul>
+</div>
+{{/if}}

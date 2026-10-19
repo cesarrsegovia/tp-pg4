@@ -1,0 +1,73 @@
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+
+        <div class="mb-4">
+            <h1 class="h2 mb-1">Editar libro</h1>
+            <p class="text-secondary mb-0">Modificá los datos del libro.</p>
+        </div>
+
+        <div class="card shadow-sm">
+            <div class="card-body">
+                {{> errores}}
+
+                <form action="/libros/{{libro.id_libro}}" method="POST">
+{{> csrf}}
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="isbn" class="form-label">ISBN</label>
+                            <input type="text" id="isbn" name="isbn" class="form-control" maxlength="20" value="{{libro.isbn}}" required>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label for="anio_publicacion" class="form-label">Año de publicación</label>
+                            <input type="number" id="anio_publicacion" name="anio_publicacion" class="form-control" value="{{libro.anio_publicacion}}" required>
+                        </div>
+
+                        <div class="col-12">
+                            <label for="titulo" class="form-label">Título</label>
+                            <input type="text" id="titulo" name="titulo" class="form-control" maxlength="200" value="{{libro.titulo}}" required>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="id_autor" class="form-label">Autor</label>
+                            <select id="id_autor" name="id_autor" class="form-select" required>
+                                {{#each autores}}
+                                <option value="{{id_autor}}" {{#if seleccionado}}selected{{/if}}>{{nombre}}</option>
+                                {{/each}}
+                            </select>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="id_categoria" class="form-label">Categoría</label>
+                            <select id="id_categoria" name="id_categoria" class="form-select" required>
+                                {{#each categorias}}
+                                <option value="{{id_categoria}}" {{#if seleccionada}}selected{{/if}}>{{nombre}}</option>
+                                {{/each}}
+                            </select>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="id_editorial" class="form-label">Editorial</label>
+                            <select id="id_editorial" name="id_editorial" class="form-select" required>
+                                {{#each editoriales}}
+                                <option value="{{id_editorial}}" {{#if seleccionada}}selected{{/if}}>{{nombre}}</option>
+                                {{/each}}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2 mt-4">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-save me-1"></i>Guardar cambios
+                        </button>
+
+                        <a href="/libros" class="btn btn-outline-secondary">
+                            <i class="bi bi-x-lg me-1"></i>Cancelar
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+    </div>
+</div>

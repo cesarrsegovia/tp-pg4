@@ -1,0 +1,14 @@
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+    <div>
+        <h1 class="h2 mb-1">{{titulo}}</h1>
+        {{#if subtitulo}}
+        <p class="text-secondary mb-0">{{subtitulo}}</p>
+        {{/if}}
+    </div>
+
+    {{#if urlNuevo}}
+    <a href="{{urlNuevo}}" class="btn btn-primary">
+        <i class="bi bi-plus-lg me-1"></i>{{textoNuevo}}
+    </a>
+    {{/if}}
+</div>

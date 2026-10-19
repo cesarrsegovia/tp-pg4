@@ -1,0 +1,55 @@
+{{> encabezado titulo="Historial del socio" subtitulo="Préstamos registrados para este socio"}}
+
+{{#if historial}}
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped table-hover align-middle">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Préstamo</th>
+                        <th>Fecha</th>
+                        <th>Vencimiento</th>
+                        <th>Devolución</th>
+                        <th>Estado</th>
+                        <th>Ejemplar</th>
+                        <th>Libro</th>
+                        <th>Autor</th>
+                        <th>Categoría</th>
+                        <th class="text-center">Días de atraso</th>
+                        <th class="text-end">Multa</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {{#each historial}}
+                    <tr>
+                        <td class="fw-semibold">#{{id_prestamo}}</td>
+                        <td>{{fecha fecha_prestamo}}</td>
+                        <td>{{fecha fecha_vencimiento}}</td>
+                        <td>{{fecha fecha_devolucion}}</td>
+                        <td><span class="badge text-bg-{{claseEstado estado}}">{{estado}}</span></td>
+                        <td>{{codigo_inventario}}</td>
+                        <td>{{titulo}}</td>
+                        <td>{{autor}}</td>
+                        <td>{{categoria}}</td>
+                        <td class="text-center">{{dias_atraso}}</td>
+                        <td class="text-end">{{moneda multa}}</td>
+                    </tr>
+                    {{/each}}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{{else}}
+<div class="alert alert-info">
+    <i class="bi bi-info-circle me-1"></i>El socio no tiene préstamos registrados.
+</div>
+{{/if}}
+
+<div class="mt-3">
+    <a href="/socios" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Volver a socios
+    </a>
+</div>

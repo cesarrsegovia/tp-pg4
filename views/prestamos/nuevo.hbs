@@ -1,0 +1,71 @@
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+
+        <div class="mb-4">
+            <h1 class="h2 mb-1">Nuevo préstamo</h1>
+            <p class="text-secondary mb-0">Seleccioná el socio y hasta 3 ejemplares disponibles.</p>
+        </div>
+
+        <div class="card shadow-sm">
+            <div class="card-body">
+                {{> errores}}
+
+                <form action="/prestamos" method="POST">
+{{> csrf}}
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label for="id_socio" class="form-label">Socio</label>
+                            <select id="id_socio" name="id_socio" class="form-select" required>
+                                <option value="">Seleccione un socio</option>
+                                {{#each socios}}
+                                <option value="{{id_socio}}">{{apellido}}, {{nombre}} - DNI: {{dni}}</option>
+                                {{/each}}
+                            </select>
+                        </div>
+
+                        <div class="col-12">
+                            <label for="id_ejemplar_1" class="form-label">Ejemplar 1</label>
+                            <select id="id_ejemplar_1" name="id_ejemplar_1" class="form-select" required>
+                                <option value="">Seleccione un ejemplar</option>
+                                {{#each ejemplares}}
+                                <option value="{{id_ejemplar}}">{{codigo_inventario}} - {{titulo}}</option>
+                                {{/each}}
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label for="id_ejemplar_2" class="form-label">Ejemplar 2 <span class="text-secondary">(opcional)</span></label>
+                            <select id="id_ejemplar_2" name="id_ejemplar_2" class="form-select">
+                                <option value="">Ninguno</option>
+                                {{#each ejemplares}}
+                                <option value="{{id_ejemplar}}">{{codigo_inventario}} - {{titulo}}</option>
+                                {{/each}}
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label for="id_ejemplar_3" class="form-label">Ejemplar 3 <span class="text-secondary">(opcional)</span></label>
+                            <select id="id_ejemplar_3" name="id_ejemplar_3" class="form-select">
+                                <option value="">Ninguno</option>
+                                {{#each ejemplares}}
+                                <option value="{{id_ejemplar}}">{{codigo_inventario}} - {{titulo}}</option>
+                                {{/each}}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2 mt-4">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-lg me-1"></i>Crear préstamo
+                        </button>
+
+                        <a href="/prestamos" class="btn btn-outline-secondary">
+                            <i class="bi bi-x-lg me-1"></i>Cancelar
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+    </div>
+</div>

@@ -1,0 +1,71 @@
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+
+        <div class="mb-4">
+            <h1 class="h2 mb-1">Editar ejemplar</h1>
+            <p class="text-secondary mb-0">Modificá el código, el libro o el estado del ejemplar.</p>
+        </div>
+
+        <div class="card shadow-sm">
+            <div class="card-body">
+                {{> errores}}
+
+                <form action="/ejemplares/{{ejemplar.id_ejemplar}}" method="POST">
+{{> csrf}}
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label for="codigo_inventario" class="form-label">Código de inventario</label>
+                            <input
+                                type="text"
+                                id="codigo_inventario"
+                                name="codigo_inventario"
+                                class="form-control"
+                                maxlength="30"
+                                value="{{ejemplar.codigo_inventario}}"
+                                required>
+                        </div>
+
+                        <div class="col-12">
+                            <label for="id_libro" class="form-label">Libro</label>
+                            <select id="id_libro" name="id_libro" class="form-select" required>
+                                {{#each libros}}
+                                <option value="{{id_libro}}" {{#if seleccionado}}selected{{/if}}>
+                                    {{titulo}}
+                                </option>
+                                {{/each}}
+                            </select>
+                        </div>
+
+                        <div class="col-12">
+                            {{#if (eq ejemplar.estado 'Prestado')}}
+                            <span class="form-label d-block">Estado actual</span>
+                            <span class="badge text-bg-{{claseEstado ejemplar.estado}} fs-6">{{ejemplar.estado}}</span>
+                            <div class="form-text">
+                                Está en un préstamo activo: el estado cambia al registrar la devolución.
+                            </div>
+                            {{else}}
+                            <label for="estado" class="form-label">Estado</label>
+                            <select id="estado" name="estado" class="form-select" required>
+                                <option value="Disponible" {{#if (eq ejemplar.estado 'Disponible')}}selected{{/if}}>Disponible</option>
+                                <option value="Dañado" {{#if (eq ejemplar.estado 'Dañado')}}selected{{/if}}>Dañado</option>
+                                <option value="En mantenimiento" {{#if (eq ejemplar.estado 'En mantenimiento')}}selected{{/if}}>En mantenimiento</option>
+                            </select>
+                            {{/if}}
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2 mt-4">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-save me-1"></i>Guardar cambios
+                        </button>
+
+                        <a href="/ejemplares" class="btn btn-outline-secondary">
+                            <i class="bi bi-x-lg me-1"></i>Cancelar
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+    </div>
+</div>
