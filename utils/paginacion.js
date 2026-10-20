@@ -1,8 +1,14 @@
 const POR_PAGINA = 10;
 
-// Escapa los comodines de LIKE para que el término se busque literalmente.
+// Convierte el término de búsqueda en una lista de patrones LIKE, uno por palabra.
+// Cada palabra debe aparecer en el registro (en cualquier orden y en cualquier campo).
+// Los comodines de LIKE (% _ \\) se escapan para buscarlos literalmente.
 const patronBusqueda = (termino = '') =>
-    `%${String(termino).trim().replace(/[\\%_]/g, '\\$&')}%`;
+    String(termino)
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((palabra) => `%${palabra.replace(/[\\%_]/g, '\\$&')}%`);
 
 // Lista de números de página para mostrar: todas si son pocas; si no,
 // la primera, la última y las cercanas a la actual, separadas por "…".

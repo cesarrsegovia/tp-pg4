@@ -52,7 +52,7 @@ const contar = async (termino = '') => {
     const resultado = await pool.query(
         `SELECT COUNT(*) AS total
          FROM editoriales
-         WHERE sin_tildes(nombre) LIKE sin_tildes($1)`,
+         WHERE sin_tildes(COALESCE((nombre)::text, '')) LIKE ALL (SELECT sin_tildes(p) FROM unnest($1::text[]) AS p)`,
         [patronBusqueda(termino)]
     );
 
@@ -64,7 +64,7 @@ const obtenerPaginado = async (termino = '', limite = 10, offset = 0) => {
     const resultado = await pool.query(
         `SELECT *
          FROM editoriales
-         WHERE sin_tildes(nombre) LIKE sin_tildes($1)
+         WHERE sin_tildes(COALESCE((nombre)::text, '')) LIKE ALL (SELECT sin_tildes(p) FROM unnest($1::text[]) AS p)
          ORDER BY nombre
          LIMIT $2 OFFSET $3`,
         [patronBusqueda(termino), limite, offset]

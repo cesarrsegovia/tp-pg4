@@ -118,9 +118,7 @@ const contar = async (termino = '') => {
          FROM ejemplares
          JOIN libros
             ON ejemplares.id_libro = libros.id_libro
-         WHERE sin_tildes(ejemplares.codigo_inventario) LIKE sin_tildes($1)
-            OR sin_tildes(libros.titulo) LIKE sin_tildes($1)
-            OR sin_tildes(ejemplares.estado) LIKE sin_tildes($1)`,
+         WHERE sin_tildes(COALESCE((ejemplares.codigo_inventario)::text, '') || ' ' || COALESCE((libros.titulo)::text, '') || ' ' || COALESCE((ejemplares.estado)::text, '')) LIKE ALL (SELECT sin_tildes(p) FROM unnest($1::text[]) AS p)`,
         [patronBusqueda(termino)]
     );
 
@@ -139,9 +137,7 @@ const obtenerPaginado = async (termino = '', limite = 10, offset = 0) => {
          FROM ejemplares
          JOIN libros
             ON ejemplares.id_libro = libros.id_libro
-         WHERE sin_tildes(ejemplares.codigo_inventario) LIKE sin_tildes($1)
-            OR sin_tildes(libros.titulo) LIKE sin_tildes($1)
-            OR sin_tildes(ejemplares.estado) LIKE sin_tildes($1)
+         WHERE sin_tildes(COALESCE((ejemplares.codigo_inventario)::text, '') || ' ' || COALESCE((libros.titulo)::text, '') || ' ' || COALESCE((ejemplares.estado)::text, '')) LIKE ALL (SELECT sin_tildes(p) FROM unnest($1::text[]) AS p)
          ORDER BY libros.titulo, ejemplares.codigo_inventario
          LIMIT $2 OFFSET $3`,
         [patronBusqueda(termino), limite, offset]

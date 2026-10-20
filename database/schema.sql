@@ -430,6 +430,17 @@ CREATE UNIQUE INDEX categorias_nombre_lower_key ON public.categorias USING btree
 -- Name: detalle_prestamo_ejemplar_activo_key; Type: INDEX; Schema: public; Owner: -
 --
 
+--
+-- Name: socios_email_lower_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX socios_email_lower_key ON public.socios USING btree (lower((email)::text));
+
+
+--
+-- Name: detalle_prestamo_ejemplar_activo_key; Type: INDEX; Schema: public; Owner: -
+--
+
 CREATE UNIQUE INDEX detalle_prestamo_ejemplar_activo_key ON public.detalle_prestamo USING btree (id_ejemplar) WHERE prestamo_activo;
 
 

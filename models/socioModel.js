@@ -112,10 +112,7 @@ const contar = async (termino = '') => {
     const resultado = await pool.query(
         `SELECT COUNT(*) AS total
          FROM socios
-         WHERE sin_tildes(nombre) LIKE sin_tildes($1)
-            OR sin_tildes(apellido) LIKE sin_tildes($1)
-            OR sin_tildes(dni) LIKE sin_tildes($1)
-            OR sin_tildes(email) LIKE sin_tildes($1)`,
+         WHERE sin_tildes(COALESCE((nombre)::text, '') || ' ' || COALESCE((apellido)::text, '') || ' ' || COALESCE((dni)::text, '') || ' ' || COALESCE((email)::text, '')) LIKE ALL (SELECT sin_tildes(p) FROM unnest($1::text[]) AS p)`,
         [patronBusqueda(termino)]
     );
 
@@ -134,10 +131,7 @@ const obtenerPaginado = async (termino = '', limite = 10, offset = 0) => {
             telefono,
             estado
          FROM socios
-         WHERE sin_tildes(nombre) LIKE sin_tildes($1)
-            OR sin_tildes(apellido) LIKE sin_tildes($1)
-            OR sin_tildes(dni) LIKE sin_tildes($1)
-            OR sin_tildes(email) LIKE sin_tildes($1)
+         WHERE sin_tildes(COALESCE((nombre)::text, '') || ' ' || COALESCE((apellido)::text, '') || ' ' || COALESCE((dni)::text, '') || ' ' || COALESCE((email)::text, '')) LIKE ALL (SELECT sin_tildes(p) FROM unnest($1::text[]) AS p)
          ORDER BY apellido, nombre
          LIMIT $2 OFFSET $3`,
         [patronBusqueda(termino), limite, offset]
@@ -146,7 +140,23 @@ const obtenerPaginado = async (termino = '', limite = 10, offset = 0) => {
     return resultado.rows;
 };
 
+// ¿Existe otro socio con ese email? (sin distinguir mayúsculas; excluye al socio indicado)
+const existeEmail = async (email, excluirId = null) => {
+
+    const resultado = await pool.query(
+        `SELECT 1
+         FROM socios
+         WHERE lower(email) = lower($1)
+           AND ($2::int IS NULL OR id_socio <> $2::int)
+         LIMIT 1`,
+        [email, excluirId]
+    );
+
+    return resultado.rowCount > 0;
+};
+
 module.exports = {
+    existeEmail,
     contar,
     obtenerPaginado,
     obtenerTodos,

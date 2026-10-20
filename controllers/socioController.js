@@ -5,6 +5,14 @@ const { validationResult } = require('express-validator');
 
 const estadosValidos = ['Activo', 'Inactivo'];
 
+const MENSAJE_EMAIL_REPETIDO = 'Ya existe un socio con ese email';
+
+// Mensaje según la restricción única que se violó (DNI o email).
+const mensajeDuplicado = (error) =>
+    /email/i.test(error.constraint || '')
+        ? MENSAJE_EMAIL_REPETIDO
+        : 'Ya existe un socio con ese DNI';
+
 // Preparar las opciones de estado para los formularios.
 const prepararEstados = (estadoActual) => [
     {
@@ -81,6 +89,14 @@ const crear = async (req, res) => {
     }
 
     try {
+        if (await socioModel.existeEmail(socio.email)) {
+            return res.status(400).render('socios/nuevo', {
+                errores: [{ msg: MENSAJE_EMAIL_REPETIDO }],
+                socio,
+                estados: prepararEstados(socio.estado)
+            });
+        }
+
         await socioModel.crear(socio);
 
         req.flash('success', 'Socio creado correctamente');
@@ -91,7 +107,7 @@ const crear = async (req, res) => {
         if (error.code === '23505') {
             return res.status(400).render('socios/nuevo', {
                 errores: [{
-                    msg: 'Ya existe un socio con ese DNI'
+                    msg: mensajeDuplicado(error)
                 }],
                 socio,
                 estados: prepararEstados(socio.estado)
@@ -156,6 +172,17 @@ const actualizar = async (req, res) => {
     }
 
     try {
+        if (await socioModel.existeEmail(socio.email, Number(req.params.id))) {
+            return res.status(400).render('socios/editar', {
+                errores: [{ msg: MENSAJE_EMAIL_REPETIDO }],
+                socio: {
+                    ...socio,
+                    id_socio: req.params.id
+                },
+                estados: prepararEstados(socio.estado)
+            });
+        }
+
         const actualizado = await socioModel.actualizar(
             req.params.id,
             socio
@@ -180,7 +207,7 @@ const actualizar = async (req, res) => {
 
             return res.status(400).render('socios/editar', {
                 errores: [{
-                    msg: 'Ya existe un socio con ese DNI'
+                    msg: mensajeDuplicado(error)
                 }],
                 socio: {
                     ...socio,

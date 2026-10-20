@@ -1,4 +1,5 @@
 const pool = require('../config/database');
+const { patronBusqueda } = require('../utils/paginacion');
 
 const obtenerTodos = async () => {
 
@@ -186,35 +187,6 @@ const obtenerDisponibilidad = async () => {
     return resultado.rows;
 };
 
-const buscar = async (termino) => {
-
-    const resultado = await pool.query(`
-        SELECT
-            libros.id_libro,
-            libros.isbn,
-            libros.titulo,
-            libros.anio_publicacion,
-            (autores.nombre || ' ' || autores.apellido) AS autor,
-            categorias.nombre AS categoria,
-            editoriales.nombre AS editorial
-        FROM libros
-        JOIN autores
-            ON libros.id_autor = autores.id_autor
-        JOIN categorias
-            ON libros.id_categoria = categorias.id_categoria
-        JOIN editoriales
-            ON libros.id_editorial = editoriales.id_editorial
-        WHERE
-            sin_tildes(libros.titulo) LIKE sin_tildes($1)
-            OR sin_tildes(libros.isbn) LIKE sin_tildes($1)
-            OR sin_tildes((autores.nombre || ' ' || autores.apellido)) LIKE sin_tildes($1)
-            OR sin_tildes(categorias.nombre) LIKE sin_tildes($1)
-        ORDER BY libros.titulo
-    `, [`%${termino}%`]);
-
-    return resultado.rows;
-};
-
 const obtenerPaginado = async (termino, pagina = 1, porPagina = 10) => {
 
     const offset = (pagina - 1) * porPagina;
@@ -224,14 +196,11 @@ const obtenerPaginado = async (termino, pagina = 1, porPagina = 10) => {
 
     if (termino) {
 
-        valores.push(`%${termino}%`);
+        valores.push(patronBusqueda(termino));
 
         where = `
             WHERE
-                sin_tildes(libros.titulo) LIKE sin_tildes($1)
-                OR sin_tildes(libros.isbn) LIKE sin_tildes($1)
-                OR sin_tildes((autores.nombre || ' ' || autores.apellido)) LIKE sin_tildes($1)
-                OR sin_tildes(categorias.nombre) LIKE sin_tildes($1)
+                sin_tildes(COALESCE((libros.titulo)::text, '') || ' ' || COALESCE((libros.isbn)::text, '') || ' ' || COALESCE(((autores.nombre || ' ' || autores.apellido))::text, '') || ' ' || COALESCE((categorias.nombre)::text, '')) LIKE ALL (SELECT sin_tildes(p) FROM unnest($1::text[]) AS p)
         `;
     }
 
@@ -276,14 +245,11 @@ const contarLibros = async (termino) => {
 
     if (termino) {
 
-        valores.push(`%${termino}%`);
+        valores.push(patronBusqueda(termino));
 
         where = `
             WHERE
-                sin_tildes(libros.titulo) LIKE sin_tildes($1)
-                OR sin_tildes(libros.isbn) LIKE sin_tildes($1)
-                OR sin_tildes((autores.nombre || ' ' || autores.apellido)) LIKE sin_tildes($1)
-                OR sin_tildes(categorias.nombre) LIKE sin_tildes($1)
+                sin_tildes(COALESCE((libros.titulo)::text, '') || ' ' || COALESCE((libros.isbn)::text, '') || ' ' || COALESCE(((autores.nombre || ' ' || autores.apellido))::text, '') || ' ' || COALESCE((categorias.nombre)::text, '')) LIKE ALL (SELECT sin_tildes(p) FROM unnest($1::text[]) AS p)
         `;
     }
 
@@ -353,7 +319,6 @@ module.exports = {
     actualizar,
     eliminar,
     obtenerDisponibilidad,
-    buscar,
     obtenerPaginado,
     contarLibros
 }

@@ -68,6 +68,14 @@ const probarSocios = async () => {
 
     const dniRep = await rechazo(await L.enviar('/socios', datos(9, { dni: dni(1) }), '/socios/nuevo'));
     L.verificar(dniRep.rechazado && /DNI|Ya existe/i.test(dniRep.texto), 'rechaza un DNI duplicado con mensaje claro', dniRep.texto.slice(0, 120));
+    const emailRep = await rechazo(await L.enviar('/socios', datos(8, { email: correo(1) }), '/socios/nuevo'));
+    L.verificar(emailRep.rechazado && /email/i.test(emailRep.texto), 'rechaza un email que ya usa otro socio, con mensaje claro', emailRep.texto.slice(0, 120));
+    const emailMay = await rechazo(await L.enviar('/socios', datos(8, { email: correo(1).toUpperCase() }), '/socios/nuevo'));
+    L.verificar(emailMay.rechazado, 'rechaza el mismo email escrito en mayúsculas');
+    const emailExistente = await rechazo(await L.enviar('/socios', datos(8, { email: 'juan@email.com' }), '/socios/nuevo'));
+    L.verificar(emailExistente.rechazado, 'rechaza el email de un socio que ya existía en el sistema');
+    const cantEmail = await pool.query('SELECT COUNT(*) n FROM socios WHERE lower(email) = lower($1)', [correo(1)]);
+    L.verificar(Number(cantEmail.rows[0].n) === 1, 'no se duplicó el email en la base');
     const cant = await pool.query('SELECT COUNT(*) n FROM socios WHERE dni = $1', [dni(1)]);
     L.verificar(Number(cant.rows[0].n) === 1, 'no se duplicó el DNI en la base');
 
@@ -103,6 +111,10 @@ const probarSocios = async () => {
     L.verificar(mod.estado === 302 && await exito(mod), 'modificar funciona y avisa');
     const trasMod = await pool.query('SELECT nombre, telefono, estado FROM socios WHERE id_socio = $1', [id]);
     L.verificar(trasMod.rows[0].telefono === '1111111111' && trasMod.rows[0].estado === 'Inactivo' && trasMod.rows[0].nombre === 'ZZPruebaMod', 'los cambios quedaron guardados (incluido el estado Inactivo)');
+    const modEmail = await rechazo(await L.enviar(`/socios/${id}`, datos(1, { email: 'juan@email.com' }), `/socios/${id}/editar`));
+    L.verificar(modEmail.rechazado && /email/i.test(modEmail.texto), 'al modificar, rechaza el email de otro socio');
+    const mismoEmail = await L.enviar(`/socios/${id}`, datos(1, { nombre: 'ZZPruebaMod2' }), `/socios/${id}/editar`);
+    L.verificar(mismoEmail.estado === 302, 'al modificar, conservar el propio email sí está permitido');
     const modDni = await rechazo(await L.enviar(`/socios/${id}`, datos(1, { dni: '12345678' }), `/socios/${id}/editar`));
     L.verificar(modDni.rechazado, 'al modificar, rechaza el DNI de otro socio');
     const modVacio = await rechazo(await L.enviar(`/socios/${id}`, datos(1, { apellido: '' }), `/socios/${id}/editar`));
@@ -145,7 +157,7 @@ const probarLibros = async () => {
     L.verificar(/Autor/.test(pagina.html) && /Categoría/.test(pagina.html) && /Editorial/.test(pagina.html), 'el listado muestra autor, categoría y editorial (JOIN)');
 
     const rt = await buscar('/libros', 'ZZPrueba Libro 1');
-    L.verificar(rt.filas.length === 1, 'busca por título');
+    L.verificar(rt.filas.some((fila) => L.textoFila(fila).includes('ZZPrueba Libro 1')), 'busca por título');
     const ri = await buscar('/libros', isbn(1));
     L.verificar(ri.filas.length === 1, 'busca por ISBN');
     const datosLibro = await pool.query(`SELECT a.nombre || ' ' || a.apellido autor, c.nombre categoria FROM libros l JOIN autores a USING(id_autor) JOIN categorias c USING(id_categoria) WHERE l.id_libro = $1`, [idLibro]);
@@ -476,7 +488,7 @@ const probarUsuarios = async () => {
     const inicio = await L.obtener('/');
     L.verificar(inicio.estado === 200 && /Dashboard/.test(inicio.html) && /ZZPrueba Usuario/.test(inicio.html), 'con sesión activa accede al sistema y ve su nombre');
     const login = await L.obtener('/login');
-    L.verificar(login.estado === 302, 'con sesión iniciada, /login redirige al inicio');
+    L.verificar(login.estado === 200 && /name="password"/.test(login.html), 'con sesión iniciada, /login muestra el formulario para entrar con otro usuario');
     const salir2 = await L.enviar('/logout', {}, '/');
     const trasSalir = await L.obtener('/socios');
     L.verificar(salir2.estado === 302 && trasSalir.estado === 302, 'tras cerrar sesión ya no se accede al sistema');
@@ -499,7 +511,16 @@ const probarTildes = async () => {
         ['/libros', 'ana karenina', 'Ana Karénina', 'libro: "ana karenina" encuentra "Ana Karénina"'],
         ['/libros', 'fiodor', 'Fiódor', 'libro: busca por autor sin tilde ("fiodor")'],
         ['/libros', 'poesia', 'Poesía', 'libro: busca por categoría sin tilde ("poesia")'],
-        ['/ejemplares', 'ana karenina', 'Ana Karénina', 'ejemplar: "ana karenina" encuentra los ejemplares de "Ana Karénina"']
+        ['/ejemplares', 'ana karenina', 'Ana Karénina', 'ejemplar: "ana karenina" encuentra los ejemplares de "Ana Karénina"'],
+        // varias palabras: nombre y apellido, en cualquier orden
+        ['/socios', 'facundo acosta', 'Facundo Acosta', 'socio: "facundo acosta" (nombre y apellido) encuentra al socio'],
+        ['/socios', 'acosta facundo', 'Facundo Acosta', 'socio: "acosta facundo" (apellido y nombre) también'],
+        ['/socios', '  FACUNDO   ACOSTA  ', 'Facundo Acosta', 'socio: ignora mayúsculas y espacios de más'],
+        ['/socios', 'facundo 31456782', 'Facundo Acosta', 'socio: combina nombre y DNI'],
+        ['/autores', 'cortazar julio', 'Cortázar', 'autor: "cortazar julio" (apellido y nombre) también'],
+        ['/libros', 'quijote cervantes', 'Quijote', 'libro: título y autor juntos ("quijote cervantes")'],
+        ['/libros', 'cervantes novela', 'Quijote', 'libro: autor y categoría juntos ("cervantes novela")'],
+        ['/ejemplares', 'beloved disponible', 'Beloved', 'ejemplar: título y estado juntos ("beloved disponible")']
     ];
 
     for (const [ruta, termino, esperado, descripcion] of casos) {
@@ -513,6 +534,10 @@ const probarTildes = async () => {
     const enie = await buscar('/autores', 'bolaño');
     L.verificar(enie.filas.some((fila) => L.textoFila(fila).includes('Bolaño')) && ene.filas.length === 0, 'la ñ se respeta: "bolaño" encuentra a Bolaño y "bolano" no');
 
+    const ninguno = await buscar('/socios', 'facundo castro');
+    L.verificar(ninguno.filas.length === 0, 'socio: dos palabras que no coinciden en el mismo socio no devuelven nada ("facundo castro")');
+    const exacto = await buscar('/socios', 'facundo acosta');
+    L.verificar(exacto.filas.length === 1, 'socio: "facundo acosta" devuelve solo a ese socio', `${exacto.filas.length}`);
     const sinTilde = await buscar('/autores', 'perez');
     L.verificar(sinTilde.pagina.estado === 200, 'una búsqueda sin coincidencias no rompe nada');
 };

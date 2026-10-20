@@ -49,6 +49,7 @@ Aplicación web para administrar libros, autores, categorías, editoriales, ejem
 > node database/ejecutar.js database/migracion_001_reglas_y_diagrama.sql
 > node database/ejecutar.js database/migracion_002_autor_nombre_apellido.sql
 > node database/ejecutar.js database/migracion_003_busqueda_sin_tildes.sql
+> node database/ejecutar.js database/migracion_004_email_socio_unico.sql
 > ```
 
 ## Estructura
@@ -81,6 +82,7 @@ database/      schema.sql, migraciones y ejecutor de scripts SQL
 | Las bajas respetan la integridad referencial | Claves foráneas + mensajes claros (código 23503) |
 | Año de publicación no superior al actual | Validador y `CHECK` en la base |
 | Búsquedas que ignoran tildes y mayúsculas ("catedra" encuentra "Cátedra"; la ñ se respeta) | Función SQL `sin_tildes` |
+| El email de un socio no puede repetirse (sin distinguir mayúsculas) | Validación en la aplicación + índice `socios_email_lower_key` |
 | Autores con nombre y apellido; no se repite la pareja (sin distinguir mayúsculas) | Índice único `autores_nombre_apellido_lower_key` |
 | Protección contra CSRF: todo formulario POST lleva un token de sesión que se verifica en el servidor | `middlewares/csrf.js` y partial `csrf` |
 
