@@ -8,8 +8,10 @@ const crearUsuario = async () => {
     try {
         const nombre = 'Administrador';
         const apellido = 'Biblioteca';
-        const email = process.env.ADMIN_EMAIL || 'admin@biblioteca.com';
-        const password = process.env.ADMIN_PASSWORD || 'AdminBiblioteca2026!';
+        // const email = process.env.ADMIN_EMAIL || 'admin@biblioteca.com';
+        // const password = process.env.ADMIN_PASSWORD || 'AdminBiblioteca2026!';
+        const email = process.env.ADMIN_EMAIL || 'cesar@biblioteca.com';
+        const password = process.env.ADMIN_PASSWORD || 'admincesar2026';
 
         const hash = await bcrypt.hash(password, 10);
 

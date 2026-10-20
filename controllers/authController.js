@@ -1,11 +1,9 @@
 
 const passport = require('../config/passport');
 
+// Si ya hay una sesión activa, se muestra igual el formulario para poder
+// iniciar sesión con otro usuario; al autenticarse, req.logIn reemplaza el usuario actual.
 const mostrarLogin = (req, res) => {
-    if (req.isAuthenticated()) {
-        return res.redirect('/');
-    }
-
     return res.render('auth/login', {
         titulo: 'Iniciar sesión'
     });
