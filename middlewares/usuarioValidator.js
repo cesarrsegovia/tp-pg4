@@ -30,6 +30,9 @@ const validarUsuario = [
         .withMessage('La contraseña no es válida')
         .isLength({ min: 12, max: 72 })
         .withMessage('La contraseña debe tener entre 12 y 72 caracteres')
+        .bail()
+        .custom((valor) => valor.trim().length > 0)
+        .withMessage('La contraseña no puede estar formada solo por espacios')
 ];
 
 module.exports = { validarUsuario };

@@ -1,24 +1,27 @@
 {{> encabezado titulo="Historial del ejemplar" subtitulo="Préstamos registrados para esta copia"}}
 
-{{#if historial}}
 <div class="card shadow-sm mb-4">
     <div class="card-body">
         <dl class="row mb-0">
             <dt class="col-sm-4 col-lg-3">Código de inventario</dt>
-            <dd class="col-sm-8 col-lg-9">{{historial.0.codigo_inventario}}</dd>
+            <dd class="col-sm-8 col-lg-9">{{ejemplar.codigo_inventario}}</dd>
 
             <dt class="col-sm-4 col-lg-3">Libro</dt>
-            <dd class="col-sm-8 col-lg-9">{{historial.0.titulo}}</dd>
+            <dd class="col-sm-8 col-lg-9">{{libro.titulo}}</dd>
 
             <dt class="col-sm-4 col-lg-3">Autor</dt>
-            <dd class="col-sm-8 col-lg-9">{{historial.0.autor}}</dd>
+            <dd class="col-sm-8 col-lg-9">{{libro.autor}}</dd>
 
             <dt class="col-sm-4 col-lg-3">Categoría</dt>
-            <dd class="col-sm-8 col-lg-9 mb-0">{{historial.0.categoria}}</dd>
+            <dd class="col-sm-8 col-lg-9">{{libro.categoria}}</dd>
+
+            <dt class="col-sm-4 col-lg-3">Estado actual</dt>
+            <dd class="col-sm-8 col-lg-9 mb-0"><span class="badge text-bg-{{claseEstado ejemplar.estado}}">{{ejemplar.estado}}</span></dd>
         </dl>
     </div>
 </div>
 
+{{#if historial}}
 <div class="card shadow-sm">
     <div class="card-body">
         <div class="table-responsive">

@@ -14,12 +14,16 @@ const usuarioRoutes = require('./routes/usuarioRoutes');
 const socioRoutes = require('./routes/socioRoutes');
 const requiereAutenticacion = require('./middlewares/requiereAutenticacion');
 const proteccionCsrf = require('./middlewares/csrf');
+const entradaSegura = require('./middlewares/entradaSegura');
 
 
 
 const pool = require('./config/database');
 
 const app = express();
+
+// No revelar qué tecnología usa el servidor.
+app.disable('x-powered-by');
 
 const session = require('express-session');
 const flash = require('connect-flash');
@@ -53,6 +57,7 @@ app.use(configurarVariablesVista);
 
 app.use(express.urlencoded({ extended: true }));
 app.use(proteccionCsrf);
+app.use(entradaSegura);
 
 app.engine('hbs', engine({
     extname: '.hbs',
@@ -142,6 +147,21 @@ app.use((error, req, res, next) => {
 
     if (res.headersSent) {
         return next(error);
+    }
+
+    // Errores del cliente detectados por Express (cuerpo demasiado grande, JSON/URL malformados).
+    if (error.status === 413) {
+        return res.status(413).render('error', {
+            titulo: 'Solicitud demasiado grande',
+            mensaje: 'Los datos enviados superan el tamaño permitido.'
+        });
+    }
+
+    if (error.status >= 400 && error.status < 500) {
+        return res.status(error.status).render('error', {
+            titulo: 'Solicitud no válida',
+            mensaje: 'No se pudo procesar la solicitud.'
+        });
     }
 
     res.status(500).render('error', {

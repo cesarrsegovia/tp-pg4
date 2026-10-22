@@ -10,15 +10,15 @@ const validarDatosEjemplar = [
         .trim()
         .notEmpty()
         .withMessage('El código de inventario es obligatorio')
-        .isLength({ max: 30 })
+        .isLength({ max: 50 })
         .withMessage(
-            'El código no puede superar los 30 caracteres'
+            'El código no puede superar los 50 caracteres'
         ),
 
     body('id_libro')
         .notEmpty()
         .withMessage('Debe seleccionar un libro')
-        .isInt()
+        .isInt({ min: 1, max: 2147483647 })
         .withMessage('El libro seleccionado no es válido')
 ];
 

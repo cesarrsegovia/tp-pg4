@@ -50,6 +50,7 @@ Aplicación web para administrar libros, autores, categorías, editoriales, ejem
 > node database/ejecutar.js database/migracion_002_autor_nombre_apellido.sql
 > node database/ejecutar.js database/migracion_003_busqueda_sin_tildes.sql
 > node database/ejecutar.js database/migracion_004_email_socio_unico.sql
+> node database/ejecutar.js database/migracion_005_unicidad_y_checks.sql
 > ```
 
 ## Estructura
@@ -84,11 +85,16 @@ database/      schema.sql, migraciones y ejecutor de scripts SQL
 | Búsquedas que ignoran tildes y mayúsculas ("catedra" encuentra "Cátedra"; la ñ se respeta) | Función SQL `sin_tildes` |
 | El email de un socio no puede repetirse (sin distinguir mayúsculas) | Validación en la aplicación + índice `socios_email_lower_key` |
 | Autores con nombre y apellido; no se repite la pareja (sin distinguir mayúsculas) | Índice único `autores_nombre_apellido_lower_key` |
+| ISBN único aunque cambie mayúsculas, guiones o espacios; código de inventario único sin distinguir mayúsculas; atraso/multa no negativos; año de publicación entre 1000 y el actual | Migración 005 (índices y `CHECK`) |
+| Pedidos simultáneos de ejemplares en distinto orden no se bloquean entre sí; los ejemplares se bloquean siempre en orden ascendente | `prestamoModel.crearPrestamo` |
+| Un envío con más de 3 ejemplares se rechaza (no se ignora el excedente); un estado de devolución inválido se rechaza | Controlador y `prestamoModel` |
+| Los errores internos de la base nunca se muestran al usuario; solo los mensajes de negocio (`ErrorNegocio`) | `utils/errores.js` |
+| Campos repetidos o con el carácter NUL se rechazan con 400 | `middlewares/entradaSegura.js` |
 | Protección contra CSRF: todo formulario POST lleva un token de sesión que se verifica en el servidor | `middlewares/csrf.js` y partial `csrf` |
 
 ## Pruebas
 
-Con la aplicación iniciada (`npm start`) y la base cargada, en otra terminal:
+Con la aplicación iniciada (`npm start`), la base cargada y **todas las migraciones aplicadas**, en otra terminal:
 
 ```bash
 npm test
@@ -96,7 +102,9 @@ npm test
 
 Las pruebas recorren, contra el servidor real, el alta, el listado, el buscador, la paginación, la modificación,
 la baja y los datos duplicados de cada entidad, además de las reglas de préstamos, devoluciones y multas,
-el acceso con sesión y la protección CSRF. Cada una crea sus propios datos (con el prefijo `ZZPrueba`) y los
+el acceso con sesión y la protección CSRF. La suite `pruebas/reglas.js` fuerza además las validaciones y reglas con entradas hostiles
+(campos repetidos, límites, concurrencia, devoluciones con 0/1/30/365 días de atraso, integridad directa en la base) y
+usa datos con el prefijo `ZZA`. Cada una crea sus propios datos (con el prefijo `ZZPrueba`) y los
 elimina al terminar, sin tocar los registros existentes. Usan el usuario `admin@biblioteca.com`.
 
 ## Notas

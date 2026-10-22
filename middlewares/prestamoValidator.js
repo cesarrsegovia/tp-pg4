@@ -7,7 +7,7 @@ const validarPrestamo = [
         .withMessage(
             'Debe seleccionar un socio'
         )
-        .isInt()
+        .isInt({ min: 1, max: 2147483647 })
         .withMessage(
             'El socio seleccionado no es válido'
         ),
@@ -17,21 +17,21 @@ const validarPrestamo = [
         .withMessage(
             'Debe seleccionar al menos un ejemplar'
         )
-        .isInt()
+        .isInt({ min: 1, max: 2147483647 })
         .withMessage(
             'El ejemplar seleccionado no es válido'
         ),
 
     body('id_ejemplar_2')
         .optional({ values: 'falsy' })
-        .isInt()
+        .isInt({ min: 1, max: 2147483647 })
         .withMessage(
             'El segundo ejemplar no es válido'
         ),
 
     body('id_ejemplar_3')
         .optional({ values: 'falsy' })
-        .isInt()
+        .isInt({ min: 1, max: 2147483647 })
         .withMessage(
             'El tercer ejemplar no es válido'
         )

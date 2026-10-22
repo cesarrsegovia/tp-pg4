@@ -1,6 +1,27 @@
 const prestamoModel = require('../models/prestamoModel');
+const socioModel = require('../models/socioModel');
+const ejemplarModel = require('../models/ejemplarModel');
+const libroModel = require('../models/libroModel');
 const { validationResult } = require('express-validator');
 const { construirListaPaginas } = require('../utils/paginacion');
+const { ErrorNegocio, esIdValido } = require('../utils/errores');
+
+// Los mensajes de negocio se muestran tal cual; cualquier otro error se registra
+// en el servidor y el usuario ve un texto genérico (sin detalles de la base de datos).
+const mensajeParaUsuario = (error, mensajeGenerico) =>
+    error instanceof ErrorNegocio ? error.message : mensajeGenerico;
+
+// Fecha con formato AAAA-MM-DD que existe en el calendario (rechaza 2026-02-30).
+const esFechaValida = (texto) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(texto)) {
+        return false;
+    }
+
+    const fecha = new Date(`${texto}T00:00:00Z`);
+
+    return !Number.isNaN(fecha.getTime()) &&
+        fecha.toISOString().slice(0, 10) === texto;
+};
 
 const mostrarFormulario = async (req, res) => {
     try {
@@ -41,20 +62,17 @@ const crear = async (req, res) => {
 
     try {
 
-        const {
-            id_socio,
-            id_ejemplar_1,
-            id_ejemplar_2,
-            id_ejemplar_3
-        } = req.body;
+        const { id_socio } = req.body;
 
-        const ejemplares = [
-            id_ejemplar_1,
-            id_ejemplar_2,
-            id_ejemplar_3
-        ].filter(id => id);
+        // Se leen todos los campos id_ejemplar_N enviados (no solo los 3 del formulario),
+        // así un envío armado a mano con un 4º ejemplar se rechaza en lugar de ignorarse.
+        const ejemplares = Object.entries(req.body)
+            .filter(([campo, valor]) =>
+                /^id_ejemplar_\d+$/.test(campo) && valor !== ''
+            )
+            .map(([, valor]) => valor);
 
-        if (ejemplares.length > 3) {
+        if (ejemplares.length > prestamoModel.MAX_EJEMPLARES_POR_PRESTAMO) {
 
             req.flash(
                 'error',
@@ -102,7 +120,7 @@ const crear = async (req, res) => {
 
         req.flash(
             'error',
-            error.message
+            mensajeParaUsuario(error, 'No se pudo registrar el préstamo')
         );
 
         res.redirect(
@@ -124,7 +142,10 @@ const listar = async (req, res) => {
             fechaHasta
         } = req.query;
 
-        let pagina = Number(req.query.pagina) || 1;
+        // Solo números enteros positivos ("1.5" o "abc" se leen como página 1).
+        let pagina = /^\d{1,9}$/.test(req.query.pagina || '')
+            ? Number(req.query.pagina)
+            : 1;
 
         if (pagina < 1) {
             pagina = 1;
@@ -153,12 +174,32 @@ const listar = async (req, res) => {
 
         if (
             id_socio &&
-            !Number.isInteger(Number(id_socio))
+            !esIdValido(id_socio)
         ) {
 
             req.flash(
                 'error',
                 'El socio seleccionado no es válido'
+            );
+
+            return res.redirect('/prestamos');
+        }
+
+        if (fechaDesde && !esFechaValida(fechaDesde)) {
+
+            req.flash(
+                'error',
+                'La fecha desde no es válida'
+            );
+
+            return res.redirect('/prestamos');
+        }
+
+        if (fechaHasta && !esFechaValida(fechaHasta)) {
+
+            req.flash(
+                'error',
+                'La fecha hasta no es válida'
             );
 
             return res.redirect('/prestamos');
@@ -191,11 +232,8 @@ const listar = async (req, res) => {
         const totalPaginas =
             Math.ceil(total / porPagina);
 
-        if (
-            totalPaginas > 0 &&
-            pagina > totalPaginas
-        ) {
-            pagina = totalPaginas;
+        if (pagina > totalPaginas) {
+            pagina = Math.max(totalPaginas, 1);
         }
 
         const prestamos =
@@ -394,7 +432,7 @@ const devolver = async (req, res) => {
 
         req.flash(
             'error',
-            error.message
+            mensajeParaUsuario(error, 'No se pudo registrar la devolución')
         );
 
         res.redirect('/prestamos');
@@ -434,11 +472,31 @@ const detalle = async (req, res) => {
                 0
             );
 
+        // Los días de atraso y la multa se calculan al devolver: mientras el préstamo está
+        // abierto no hay valores definitivos, así que se muestra un guion en lugar de "$0".
+        const devuelto = primerResultado.estado === 'Devuelto';
+
+        const detallesFormateados = resultados.map(item => ({
+            ...item,
+            dias_atraso: item.dias_atraso ?? '—',
+            multa: item.multa !== null ? item.multa : '—'
+        }));
+
+        const diasVencido = Number(primerResultado.dias_vencido);
+
+        const avisoAtraso =
+            !devuelto && diasVencido > 0
+                ? `Préstamo vencido: lleva ${diasVencido} día${diasVencido === 1 ? '' : 's'} de atraso. ` +
+                  'La multa ($500 por día y por ejemplar) se calcula al registrar la devolución.'
+                : null;
+
         res.render(
             'prestamos/detalle',
             {
                 prestamo: primerResultado,
-                detalles: resultados,
+                detalles: detallesFormateados,
+                devuelto,
+                avisoAtraso,
                 totalMulta
             }
         );
@@ -464,6 +522,15 @@ const historialSocio = async (req, res) => {
 
         const { id } = req.params;
 
+        const socio = await socioModel.obtenerPorId(id);
+
+        if (!socio) {
+            return res.status(404).render('error', {
+                titulo: 'No encontrado',
+                mensaje: 'El socio no existe'
+            });
+        }
+
         const historial =
             await prestamoModel.obtenerHistorialSocio(id);
 
@@ -483,6 +550,7 @@ const historialSocio = async (req, res) => {
         res.render(
             'prestamos/historialSocio',
             {
+                socio,
                 historial: historialFormateado
             }
         );
@@ -508,6 +576,17 @@ const historialEjemplar = async (req, res) => {
 
         const { id } = req.params;
 
+        const ejemplar = await ejemplarModel.obtenerPorId(id);
+
+        if (!ejemplar) {
+            return res.status(404).render('error', {
+                titulo: 'No encontrado',
+                mensaje: 'El ejemplar no existe'
+            });
+        }
+
+        const libro = await libroModel.obtenerDetalle(ejemplar.id_libro);
+
         const historial =
             await prestamoModel.obtenerHistorialEjemplar(id);
 
@@ -527,6 +606,8 @@ const historialEjemplar = async (req, res) => {
         res.render(
             'prestamos/historialEjemplar',
             {
+                ejemplar,
+                libro,
                 historial: historialFormateado
             }
         );

@@ -48,7 +48,7 @@ const crear = async (req, res) => {
 
     if (!errores.isEmpty()) {
 
-        return res.render('editoriales/nueva', {
+        return res.status(400).render('editoriales/nueva', {
             errores: errores.array(),
             datos: req.body
         });
@@ -128,7 +128,7 @@ const actualizar = async (req, res) => {
 
     if (!errores.isEmpty()) {
 
-        return res.render('editoriales/editar', {
+        return res.status(400).render('editoriales/editar', {
 
             errores: errores.array(),
 

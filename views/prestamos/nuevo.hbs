@@ -10,7 +10,19 @@
             <div class="card-body">
                 {{> errores}}
 
-                <form action="/prestamos" method="POST">
+                {{#unless socios.length}}
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle me-1"></i>No hay socios activos: no se pueden registrar préstamos.
+                </div>
+                {{/unless}}
+
+                {{#unless ejemplares.length}}
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle me-1"></i>No hay ejemplares disponibles para prestar.
+                </div>
+                {{/unless}}
+
+                <form action="/prestamos" method="POST" id="formularioPrestamo">
 {{> csrf}}
                     <div class="row g-3">
                         <div class="col-12">
@@ -69,3 +81,27 @@
 
     </div>
 </div>
+
+<script>
+    // Un mismo ejemplar no puede elegirse dos veces: se deshabilita en los otros selectores.
+    (function () {
+        var selectores = document.querySelectorAll('#formularioPrestamo select[name^="id_ejemplar_"]');
+
+        function actualizar() {
+            var elegidos = [];
+
+            selectores.forEach(function (s) { if (s.value) { elegidos.push(s.value); } });
+
+            selectores.forEach(function (s) {
+                Array.prototype.forEach.call(s.options, function (opcion) {
+                    opcion.disabled = opcion.value !== '' &&
+                        opcion.value !== s.value &&
+                        elegidos.indexOf(opcion.value) !== -1;
+                });
+            });
+        }
+
+        selectores.forEach(function (s) { s.addEventListener('change', actualizar); });
+        actualizar();
+    })();
+</script>

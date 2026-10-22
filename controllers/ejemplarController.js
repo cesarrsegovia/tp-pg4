@@ -71,7 +71,7 @@ const crear = async (req, res) => {
             const libros =
                 await ejemplarModel.obtenerLibros();
 
-            return res.render('ejemplares/nuevo', {
+            return res.status(400).render('ejemplares/nuevo', {
                 errores: errores.array(),
                 datos: req.body,
                 libros

@@ -19,8 +19,8 @@ const validarLibro = [
     body('anio_publicacion')
         .notEmpty()
         .withMessage('El año de publicación es obligatorio')
-        .isInt()
-        .withMessage('El año debe ser un número entero')
+        .matches(/^\d{1,9}$/)
+        .withMessage('El año debe ser un número entero de 4 dígitos')
         .bail()
         .custom((valor) => {
             const anio = Number(valor);
@@ -38,19 +38,19 @@ const validarLibro = [
     body('id_autor')
         .notEmpty()
         .withMessage('Debe seleccionar un autor')
-        .isInt()
+        .isInt({ min: 1, max: 2147483647 })
         .withMessage('El autor seleccionado no es válido'),
 
     body('id_categoria')
         .notEmpty()
         .withMessage('Debe seleccionar una categoría')
-        .isInt()
+        .isInt({ min: 1, max: 2147483647 })
         .withMessage('La categoría seleccionada no es válida'),
 
     body('id_editorial')
         .notEmpty()
         .withMessage('Debe seleccionar una editorial')
-        .isInt()
+        .isInt({ min: 1, max: 2147483647 })
         .withMessage('La editorial seleccionada no es válida')
 ];
 

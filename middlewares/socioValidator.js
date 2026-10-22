@@ -4,6 +4,7 @@ const { body } = require('express-validator');
 const validarSocio = [
     body('nombre')
         .trim()
+        .customSanitizer((valor) => String(valor).replace(/\s+/g, ' '))
         .notEmpty()
         .withMessage('El nombre es obligatorio')
         .isLength({ max: 100 })
@@ -11,6 +12,7 @@ const validarSocio = [
 
     body('apellido')
         .trim()
+        .customSanitizer((valor) => String(valor).replace(/\s+/g, ' '))
         .notEmpty()
         .withMessage('El apellido es obligatorio')
         .isLength({ max: 100 })
@@ -40,7 +42,10 @@ const validarSocio = [
         .optional({ values: 'falsy' })
         .trim()
         .isLength({ max: 30 })
-        .withMessage('El teléfono no puede superar los 30 caracteres'),
+        .withMessage('El teléfono no puede superar los 30 caracteres')
+        .bail()
+        .matches(/^[0-9+()\-.\s]+$/)
+        .withMessage('El teléfono solo puede contener números, espacios y los símbolos + ( ) - .'),
 
     body('estado')
         .notEmpty()

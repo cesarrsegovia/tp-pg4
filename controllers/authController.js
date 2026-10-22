@@ -10,7 +10,9 @@ const mostrarLogin = (req, res) => {
 };
 
 const iniciarSesion = (req, res, next) => {
-    passport.authenticate('local', (error, usuario, info) => {
+    passport.authenticate('local', {
+        badRequestMessage: 'Ingresá tu email y tu contraseña'
+    }, (error, usuario, info) => {
         if (error) {
             return next(error);
         }

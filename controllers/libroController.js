@@ -85,7 +85,7 @@ const crear = async (req, res) => {
             const editoriales =
                 await libroModel.obtenerEditoriales();
 
-            return res.render('libros/nuevo', {
+            return res.status(400).render('libros/nuevo', {
                 errores: errores.array(),
                 datos: req.body,
                 autores,
@@ -181,7 +181,7 @@ const actualizar = async (req, res) => {
             const editoriales =
                 await libroModel.obtenerEditoriales();
 
-            return res.render('libros/editar', {
+            return res.status(400).render('libros/editar', {
                 errores: errores.array(),
 
                 libro: {

@@ -1,10 +1,18 @@
 const pool = require('../config/database');
+const { ErrorNegocio, esIdValido } = require('../utils/errores');
 
 const MAX_PRESTAMOS_ACTIVOS = 3;
 const MAX_EJEMPLARES_POR_PRESTAMO = 3;
 const MULTA_POR_DIA = 500;
 
 const ESTADOS_DEVOLUCION = ['Disponible', 'Dañado', 'En mantenimiento'];
+
+// Si PostgreSQL abortó la transacción por un bloqueo cruzado (deadlock) o un fallo de
+// serialización, el usuario recibe un mensaje claro y puede reintentar.
+const traducirConflictoDeConcurrencia = (error) =>
+    error.code === '40P01' || error.code === '40001'
+        ? new ErrorNegocio('Otro usuario está operando sobre los mismos datos. Intentá nuevamente.')
+        : error;
 
 const obtenerSociosActivos = async () => {
     const resultado = await pool.query(
@@ -38,8 +46,29 @@ const obtenerEjemplaresDisponibles = async () => {
 
 const crearPrestamo = async (
     id_socio,
-    ejemplares
+    ejemplaresSolicitados
 ) => {
+
+    if (!esIdValido(id_socio)) {
+        throw new ErrorNegocio('El socio seleccionado no es válido');
+    }
+
+    if (!ejemplaresSolicitados.every(esIdValido)) {
+        throw new ErrorNegocio('El ejemplar seleccionado no es válido');
+    }
+
+    // Se comparan como números ("7" y "07" son el mismo ejemplar) y se bloquean siempre
+    // en el mismo orden: así dos préstamos simultáneos con los mismos ejemplares
+    // elegidos en distinto orden no pueden quedar bloqueados entre sí (deadlock).
+    const ejemplares = ejemplaresSolicitados
+        .map(Number)
+        .sort((a, b) => a - b);
+
+    if (new Set(ejemplares).size !== ejemplares.length) {
+        throw new ErrorNegocio(
+            'No puede seleccionar el mismo ejemplar más de una vez'
+        );
+    }
 
     const client = await pool.connect();
 
@@ -59,7 +88,7 @@ const crearPrestamo = async (
         );
         if (resultadoSocio.rows.length === 0) {
 
-            throw new Error(
+            throw new ErrorNegocio(
                 'El socio no existe'
             );
         }
@@ -67,7 +96,7 @@ const crearPrestamo = async (
 
         if (socio.estado !== 'Activo') {
 
-            throw new Error(
+            throw new ErrorNegocio(
                 'El socio no está activo'
             );
         }
@@ -76,14 +105,14 @@ const crearPrestamo = async (
         //verificar limite de ejemplares por préstamo
         if (ejemplares.length === 0) {
 
-            throw new Error(
+            throw new ErrorNegocio(
                 'Debe seleccionar al menos un ejemplar'
             );
         }
 
         if (ejemplares.length > MAX_EJEMPLARES_POR_PRESTAMO) {
 
-            throw new Error(
+            throw new ErrorNegocio(
                 'Un préstamo no puede tener más de 3 ejemplares'
             );
         }
@@ -104,7 +133,7 @@ const crearPrestamo = async (
 
         if (prestamosAbiertos >= MAX_PRESTAMOS_ACTIVOS) {
 
-            throw new Error(
+            throw new ErrorNegocio(
                 'El socio ya tiene 3 préstamos activos y no puede registrar otro'
             );
         }
@@ -127,7 +156,7 @@ const crearPrestamo = async (
                 resultadoEjemplar.rows.length === 0
             ) {
 
-                throw new Error(
+                throw new ErrorNegocio(
                     'Uno de los ejemplares no existe'
                 );
             }
@@ -137,7 +166,7 @@ const crearPrestamo = async (
 
             if (ejemplar.estado !== 'Disponible') {
 
-                throw new Error(
+                throw new ErrorNegocio(
                     'Uno de los ejemplares no está disponible'
                 );
             }
@@ -184,7 +213,7 @@ const crearPrestamo = async (
 
                 if (error.code === '23505') {
 
-                    throw new Error(
+                    throw new ErrorNegocio(
                         'Uno de los ejemplares ya está incluido en un préstamo activo'
                     );
                 }
@@ -213,7 +242,7 @@ const crearPrestamo = async (
 
         await client.query('ROLLBACK');
 
-        throw error;
+        throw traducirConflictoDeConcurrencia(error);
 
     } finally {
 
@@ -305,6 +334,19 @@ const obtenerDetalles = async (idPrestamo) => {
 // estadosEjemplares: { [id_ejemplar]: 'Disponible' | 'Dañado' | 'En mantenimiento' }
 const devolverPrestamo = async (idPrestamo, estadosEjemplares = {}) => {
 
+    // Un estado que no sea Disponible, Dañado o En mantenimiento no se reemplaza en
+    // silencio por Disponible: se rechaza la devolución para que el usuario lo corrija.
+    // (Un valor vacío significa "no indicado" y el ejemplar vuelve Disponible.)
+    const estadoInvalido = Object.values(estadosEjemplares).some(
+        (estado) => estado !== '' && !ESTADOS_DEVOLUCION.includes(estado)
+    );
+
+    if (estadoInvalido) {
+        throw new ErrorNegocio(
+            'El estado indicado para un ejemplar no es válido (Disponible, Dañado o En mantenimiento)'
+        );
+    }
+
     const client = await pool.connect();
 
     try {
@@ -330,14 +372,14 @@ const devolverPrestamo = async (idPrestamo, estadosEjemplares = {}) => {
             );
 
         if (resultadoPrestamo.rows.length === 0) {
-            throw new Error('El préstamo no existe');
+            throw new ErrorNegocio('El préstamo no existe');
         }
 
         const prestamo = resultadoPrestamo.rows[0];
 
         // 2. Impedir una segunda devolución
         if (prestamo.estado !== 'Activo' && prestamo.estado !== 'Vencido') {
-            throw new Error('El préstamo ya fue devuelto');
+            throw new ErrorNegocio('El préstamo ya fue devuelto');
         }
 
         // 3. Obtener detalles
@@ -429,7 +471,7 @@ const devolverPrestamo = async (idPrestamo, estadosEjemplares = {}) => {
 
         await client.query('ROLLBACK');
 
-        throw error;
+        throw traducirConflictoDeConcurrencia(error);
 
     } finally {
 
@@ -459,7 +501,12 @@ const obtenerDetalleCompleto = async (id) => {
             categorias.nombre AS categoria,
 
             detalle_prestamo.dias_atraso,
-            detalle_prestamo.multa
+            detalle_prestamo.multa,
+
+            GREATEST(
+                CURRENT_DATE - prestamos.fecha_vencimiento,
+                0
+            ) AS dias_vencido
 
          FROM prestamos
 
@@ -793,11 +840,18 @@ const obtenerConFiltros = async ({
             socios.apellido,
             socios.dni,
             COUNT(detalle_prestamo.id_detalle) AS cantidad_ejemplares,
-            STRING_AGG(
-                libros.titulo || ' (' || autores.nombre || ' ' || autores.apellido || ')',
-                ', '
-                ORDER BY detalle_prestamo.id_detalle
-            ) AS libros
+            COALESCE(
+                JSON_AGG(
+                    JSON_BUILD_OBJECT(
+                        'codigo', ejemplares.codigo_inventario,
+                        'titulo', libros.titulo,
+                        'autor', autores.nombre || ' ' || autores.apellido,
+                        'categoria', categorias.nombre
+                    )
+                    ORDER BY detalle_prestamo.id_detalle
+                ) FILTER (WHERE detalle_prestamo.id_detalle IS NOT NULL),
+                '[]'::json
+            ) AS items
 
         FROM prestamos
 
@@ -815,6 +869,9 @@ const obtenerConFiltros = async ({
 
         LEFT JOIN autores
             ON libros.id_autor = autores.id_autor
+
+        LEFT JOIN categorias
+            ON libros.id_categoria = categorias.id_categoria
     `;
 
     if (condiciones.length > 0) {
@@ -983,6 +1040,7 @@ const contarConFiltros = async ({
 };
 
 module.exports = {
+    MAX_EJEMPLARES_POR_PRESTAMO,
     obtenerSociosActivos,
     obtenerEjemplaresDisponibles,
     crearPrestamo,

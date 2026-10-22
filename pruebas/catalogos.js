@@ -73,10 +73,10 @@ const probar = async (c) => {
 
     // sin nombre / nombre vacío
     const vacio = await L.enviar(c.base, c.campos('   '), c.nuevo);
-    L.verificar(vacio.estado === 200 && /Revisá los siguientes errores/.test(vacio.html), 'rechaza un nombre vacío con mensaje de error', `${vacio.estado}`);
+    L.verificar(vacio.estado === 400 && /Revisá los siguientes errores/.test(vacio.html), 'rechaza un nombre vacío con mensaje de error', `${vacio.estado}`);
 
     const largo = await L.enviar(c.base, c.campoLargo('x'.repeat(c.maximo + 1)), c.nuevo);
-    L.verificar(largo.estado === 200 && /Revisá los siguientes errores/.test(largo.html), `rechaza un nombre de más de ${c.maximo} caracteres`, `${largo.estado}`);
+    L.verificar(largo.estado === 400 && /Revisá los siguientes errores/.test(largo.html), `rechaza un nombre de más de ${c.maximo} caracteres`, `${largo.estado}`);
 
     // ---------------- Listado ----------------
     L.seccion(`${c.nombre} - Listado`);
@@ -176,7 +176,7 @@ const probar = async (c) => {
     L.verificar(nuevo.filas.length === 1, 'el nombre nuevo aparece en el listado');
 
     const modVacio = await L.enviar(`${c.base}/${idNuevo}`, c.campos(' '), `${c.base}/${idNuevo}/editar`);
-    L.verificar(modVacio.estado === 200 && /Revisá los siguientes errores/.test(modVacio.html), 'al modificar rechaza un nombre vacío');
+    L.verificar(modVacio.estado === 400 && /Revisá los siguientes errores/.test(modVacio.html), 'al modificar rechaza un nombre vacío');
 
     const inexistente = await L.obtener(`${c.base}/99999999/editar`);
     L.verificar([404, 302].includes(inexistente.estado), 'editar un registro inexistente no rompe la aplicación', `${inexistente.estado}`);

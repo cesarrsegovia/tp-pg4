@@ -4,7 +4,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "test": "node pruebas/catalogos.js && node pruebas/entidades.js",
+    "test": "node pruebas/catalogos.js && node pruebas/entidades.js && node pruebas/reglas.js",
     "db:schema": "node database/ejecutar.js database/schema.sql",
     "db:seed": "node crearUsuario.js && node crearSocios.js && node crearAutoresCategorias.js && node crearEditoriales.js && node crearLibrosEjemplares.js"
   },

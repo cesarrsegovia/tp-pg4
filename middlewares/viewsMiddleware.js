@@ -20,6 +20,7 @@ const configurarVariablesVista = (req,res, next) => {
     res.locals.success = req.flash('success');
     res.locals.error = req.flash('error');
     res.locals.seccion = obtenerSeccion(req.path);
+    res.locals.anioActual = new Date().getFullYear();
 
     next();
 }

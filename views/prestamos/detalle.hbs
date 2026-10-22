@@ -1,5 +1,11 @@
 {{> encabezado titulo="Detalle del préstamo" subtitulo="Información completa del préstamo y sus ejemplares"}}
 
+{{#if avisoAtraso}}
+<div class="alert alert-warning">
+    <i class="bi bi-exclamation-triangle me-1"></i>{{avisoAtraso}}
+</div>
+{{/if}}
+
 <div class="card shadow-sm mb-4">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h2 class="h5 mb-0">Préstamo #{{prestamo.id_prestamo}}</h2>
@@ -63,7 +69,11 @@
 
     <div class="card-footer d-flex justify-content-between align-items-center">
         <span class="fw-semibold">Total de multa</span>
+        {{#if devuelto}}
         <span class="fs-5 fw-bold {{#if totalMulta}}text-danger{{/if}}">{{moneda totalMulta}}</span>
+        {{else}}
+        <span class="fs-5 fw-bold text-secondary">— <small class="fw-normal">(se calcula al devolver)</small></span>
+        {{/if}}
     </div>
 </div>
 

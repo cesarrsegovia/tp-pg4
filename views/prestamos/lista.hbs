@@ -77,7 +77,14 @@
                         <td>{{dni}}</td>
                         <td>{{fecha fecha_prestamo}}</td>
                         <td>{{fecha fecha_vencimiento}}</td>
-                        <td class="small">{{libros}}</td>
+                        <td class="small">
+                            {{#each items}}
+                            <div>
+                                <span class="fw-semibold">{{codigo}}</span> · {{titulo}}
+                                <span class="text-secondary">({{autor}} · {{categoria}})</span>
+                            </div>
+                            {{/each}}
+                        </td>
                         <td class="text-center">{{cantidad_ejemplares}}</td>
                         <td>
                             <span class="badge text-bg-{{claseEstado estado}}">{{estado}}</span>

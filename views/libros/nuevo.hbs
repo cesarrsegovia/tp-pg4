@@ -20,7 +20,7 @@
 
                         <div class="col-md-6">
                             <label for="anio_publicacion" class="form-label">Año de publicación</label>
-                            <input type="number" id="anio_publicacion" name="anio_publicacion" class="form-control" value="{{datos.anio_publicacion}}" required>
+                            <input type="number" id="anio_publicacion" name="anio_publicacion" class="form-control" min="1000" max="{{anioActual}}" step="1" value="{{datos.anio_publicacion}}" required>
                         </div>
 
                         <div class="col-12">

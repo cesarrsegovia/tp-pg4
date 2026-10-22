@@ -1,6 +1,7 @@
 
 const pool = require('../config/database');
 
+// El email no distingue mayúsculas ni espacios alrededor (se guarda en minúsculas al registrarse).
 const buscarPorEmail = async (email) => {
     const resultado = await pool.query(
         `SELECT
@@ -10,8 +11,8 @@ const buscarPorEmail = async (email) => {
             email,
             password
          FROM usuarios
-         WHERE email = $1`,
-        [email]
+         WHERE lower(email) = lower($1)`,
+        [String(email).trim()]
     );
 
     return resultado.rows[0] || null;

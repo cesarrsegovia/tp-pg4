@@ -43,7 +43,7 @@ const crear = async (req, res) => {
     const errores = validationResult(req);
 
     if (!errores.isEmpty()) {
-        return res.render('categorias/nueva', {
+        return res.status(400).render('categorias/nueva', {
             errores: errores.array(),
             datos: req.body
         });
@@ -111,7 +111,7 @@ const actualizar = async (req,res) => {
     const errores = validationResult(req);
 
     if(!errores.isEmpty()){
-        return res.render('categorias/editar', {
+        return res.status(400).render('categorias/editar', {
             errores: errores.array(),
             categoria: {
                 id_categoria: req.params.id,

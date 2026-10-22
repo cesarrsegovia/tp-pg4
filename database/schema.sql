@@ -508,6 +508,37 @@ ALTER TABLE ONLY public.prestamos
 
 
 --
+-- Name: libros_isbn_normalizado_key; Type: INDEX; Schema: public; Owner: -
+-- (migración 005: el ISBN es único aunque cambie la capitalización, los guiones o los espacios)
+--
+
+CREATE UNIQUE INDEX libros_isbn_normalizado_key ON public.libros USING btree (upper(replace(replace((isbn)::text, '-'::text, ''::text), ' '::text, ''::text)));
+
+
+--
+-- Name: ejemplares_codigo_lower_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX ejemplares_codigo_lower_key ON public.ejemplares USING btree (lower((codigo_inventario)::text));
+
+
+--
+-- Name: detalle_prestamo detalle_prestamo_valores_check; Type: CHECK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE public.detalle_prestamo
+    ADD CONSTRAINT detalle_prestamo_valores_check CHECK ((COALESCE(dias_atraso, 0) >= 0) AND (COALESCE(multa, (0)::numeric) >= (0)::numeric));
+
+
+--
+-- Name: libros libros_anio_minimo_check; Type: CHECK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE public.libros
+    ADD CONSTRAINT libros_anio_minimo_check CHECK ((anio_publicacion >= 1000));
+
+
+--
 -- PostgreSQL database dump complete
 --
 
