@@ -1,7 +1,7 @@
 # Informe de auditoría: validaciones y lógica de negocio
 
 Sistema de Gestión de Préstamos de Biblioteca — TP Final Programación IV (UTN FRTDF)
-Fecha de la auditoría: 22/10/2026 · Última actualización: 02/11/2026
+Fecha de la auditoría: 22/10/2026 · Última actualización: 02/11/2026 (fechas manuales de préstamo y devolución, sección 9)
 
 ## 1. Resumen ejecutivo
 
@@ -153,3 +153,37 @@ npm start            # en una terminal
 npm test             # en otra: catalogos + entidades + reglas
 node pruebas/reglas.js prestamos   # una sola área: auth|socios|catalogos|libros|ejemplares|prestamos|bd|robustez
 ```
+
+## 9. Ampliación: fecha de préstamo y de devolución manuales
+
+A pedido, el préstamo y la devolución permiten elegir la fecha (por defecto, hoy).
+
+| Regla | Dónde |
+|---|---|
+| Fecha de préstamo opcional (vacía = hoy); **no puede ser posterior a hoy** ni anterior al 01/01/2000; formato AAAA-MM-DD real (rechaza `2026-02-30`, `abc`, inyecciones, campos repetidos) | `prestamoModel.crearPrestamo` |
+| El vencimiento sigue siendo **fecha de préstamo + 7 días**; si ya pasó, el préstamo nace **Vencido** | `crearPrestamo` |
+| Coherencia: un **ejemplar no puede prestarse con fecha anterior a su última devolución** (el mismo día sí) | `crearPrestamo` |
+| Fecha de devolución opcional (vacía = hoy); debe estar **entre la fecha de préstamo y hoy** | `devolverPrestamo` |
+| Días de atraso y multa se calculan con la **fecha de devolución elegida** (no con la de hoy) | `devolverPrestamo` |
+| Un error de fecha en la devolución **vuelve al formulario** con el motivo; la segunda devolución sigue rechazada | controlador |
+| Defensa en la base: `CHECK` de fecha de préstamo ≤ hoy y de devolución entre préstamo y hoy | migración 006 |
+| Cliente: `<input type="date">` con `max` = hoy (y `min` = fecha de préstamo en la devolución); el vencimiento se muestra en vivo | `prestamos/nuevo`, `prestamos/devolver` |
+
+**Pruebas:** área nueva `fechas` de `pruebas/reglas.js` (casos F01–F51 y B15–B17): fecha de hace 10 días → vence hace 3 y queda
+Vencido; mañana / 2999 / `abc` / mes 13 / 2026-02-30 / 0000-00-00 / inyección SQL / antes del 2000 → rechazadas sin crear nada;
+devolver con fecha de hace 8 días un préstamo vencido hace 13 → 5 días de atraso y $7.500 con 3 ejemplares; devolución futura,
+anterior al préstamo o inválida → rechazada y el préstamo sigue abierto; límites inclusivos (devolver el mismo día del préstamo).
+Resultado en una base aislada: **151/151, 195/195 y 320/320**.
+
+**Para activarlo en tu base:** `node database/ejecutar.js database/migracion_006_fechas_de_prestamo.sql` (verifica que no haya datos que
+la violen y es idempotente). El código funciona sin la migración, pero las pruebas B15–B17 la requieren.
+
+## 10. Atraso y multa visibles antes de devolver
+
+Antes, los días de atraso y la multa solo se veían después de registrar la devolución. Ahora:
+
+- **Detalle del préstamo (vencido):** aviso "lleva N días de atraso; si se devuelve hoy, la multa es $X", y cada ejemplar muestra sus días y su multa acumulados a hoy, con el total rotulado "(a hoy; se confirma al devolver)". Si el préstamo está en término muestra 0 días y $0 sin aviso; si ya fue devuelto, los valores definitivos guardados.
+- **Pantalla "Devolver":** tarjeta "Atraso y multa" con vencimiento, días de atraso, multa por ejemplar y total. **Se recalcula en vivo** al cambiar la fecha de devolución (p. ej. vencido hace 6 días: hoy → 6 días y $6.000; elegir hace 3 días → 3 días y $3.000; antes del vencimiento → $0).
+- Lo mostrado es informativo: el cálculo definitivo lo sigue haciendo el servidor al registrar la devolución, y se comprobó que coincide con lo cobrado (prueba F65).
+
+Pruebas nuevas F60–F66 en `pruebas/reglas.js`. Resultado en base aislada: **151/151, 195/195 y 327/327**.

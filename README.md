@@ -51,6 +51,7 @@ Aplicación web para administrar libros, autores, categorías, editoriales, ejem
 > node database/ejecutar.js database/migracion_003_busqueda_sin_tildes.sql
 > node database/ejecutar.js database/migracion_004_email_socio_unico.sql
 > node database/ejecutar.js database/migracion_005_unicidad_y_checks.sql
+> node database/ejecutar.js database/migracion_006_fechas_de_prestamo.sql
 > ```
 
 ## Estructura
@@ -76,6 +77,8 @@ database/      schema.sql, migraciones y ejecutor de scripts SQL
 | Máximo 3 ejemplares por préstamo | Formulario, controlador y modelo |
 | Solo se prestan ejemplares Disponibles, y no pueden estar en dos préstamos activos | Estado + bloqueo `FOR UPDATE` + índice único parcial `detalle_prestamo_ejemplar_activo_key` |
 | Vencimiento = fecha de préstamo + 7 días | Automático al crear el préstamo |
+| La fecha de préstamo se puede elegir (por defecto hoy) pero no puede ser posterior a hoy ni anterior al 01/01/2000; un ejemplar no puede prestarse con fecha anterior a su última devolución | `prestamoModel.crearPrestamo` y `CHECK` de la migración 006 |
+| La fecha de devolución se puede elegir (por defecto hoy) y debe estar entre la fecha de préstamo y hoy; el atraso y la multa se calculan con ella | `prestamoModel.devolverPrestamo` y `CHECK` de la migración 006 |
 | Multa de $500 por día de atraso y por ejemplar | `prestamoModel.devolverPrestamo` |
 | Al devolver, cada ejemplar vuelve Disponible, Dañado o En mantenimiento según se indique | Pantalla de devolución |
 | No se puede devolver dos veces un préstamo | Control de estado en la transacción |

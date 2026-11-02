@@ -539,6 +539,23 @@ ALTER TABLE public.libros
 
 
 --
+-- Name: prestamos prestamos_fecha_prestamo_check; Type: CHECK CONSTRAINT; Schema: public; Owner: -
+-- (migración 006: la fecha de préstamo se carga a mano y no puede ser futura)
+--
+
+ALTER TABLE public.prestamos
+    ADD CONSTRAINT prestamos_fecha_prestamo_check CHECK ((fecha_prestamo <= CURRENT_DATE));
+
+
+--
+-- Name: prestamos prestamos_fecha_devolucion_check; Type: CHECK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE public.prestamos
+    ADD CONSTRAINT prestamos_fecha_devolucion_check CHECK (((fecha_devolucion IS NULL) OR ((fecha_devolucion >= fecha_prestamo) AND (fecha_devolucion <= CURRENT_DATE))));
+
+
+--
 -- PostgreSQL database dump complete
 --
 

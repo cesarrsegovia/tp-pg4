@@ -5,23 +5,25 @@ const libroModel = require('../models/libroModel');
 const { validationResult } = require('express-validator');
 const { construirListaPaginas } = require('../utils/paginacion');
 const { ErrorNegocio, esIdValido } = require('../utils/errores');
+const { esFechaValida } = require('../utils/fechas');
 
 // Los mensajes de negocio se muestran tal cual; cualquier otro error se registra
 // en el servidor y el usuario ve un texto genérico (sin detalles de la base de datos).
 const mensajeParaUsuario = (error, mensajeGenerico) =>
     error instanceof ErrorNegocio ? error.message : mensajeGenerico;
 
-// Fecha con formato AAAA-MM-DD que existe en el calendario (rechaza 2026-02-30).
-const esFechaValida = (texto) => {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(texto)) {
-        return false;
-    }
+// Días entre el vencimiento y la fecha dada (AAAA-MM-DD); 0 si no hay atraso.
+const diasDeAtraso = (vencimiento, fecha) => {
+    const aMs = (texto) => {
+        const [anio, mes, dia] = texto.split('-').map(Number);
+        return Date.UTC(anio, mes - 1, dia);
+    };
 
-    const fecha = new Date(`${texto}T00:00:00Z`);
-
-    return !Number.isNaN(fecha.getTime()) &&
-        fecha.toISOString().slice(0, 10) === texto;
+    return Math.max(0, Math.round((aMs(fecha) - aMs(vencimiento)) / 86400000));
 };
+
+// Un campo de fecha vacío significa "usar hoy" (null); cualquier otro valor se valida en el modelo.
+const fechaOpcional = (valor) => (valor ? valor : null);
 
 const mostrarFormulario = async (req, res) => {
     try {
@@ -33,7 +35,9 @@ const mostrarFormulario = async (req, res) => {
 
         res.render('prestamos/nuevo', {
             socios,
-            ejemplares
+            ejemplares,
+            hoy: await prestamoModel.obtenerFechaActual(),
+            fechaMinima: prestamoModel.FECHA_MINIMA
         });
     } catch (error) {
         console.error(error);
@@ -104,7 +108,8 @@ const crear = async (req, res) => {
 
         await prestamoModel.crearPrestamo(
             id_socio,
-            ejemplares
+            ejemplares,
+            fechaOpcional(req.body.fecha_prestamo)
         );
 
         req.flash(
@@ -376,9 +381,21 @@ const mostrarDevolucion = async (req, res) => {
         const detalles =
             await prestamoModel.obtenerDetalles(id);
 
+        const hoy = await prestamoModel.obtenerFechaActual();
+
+        // Atraso y multa si se devolviera hoy (la pantalla los recalcula al cambiar la fecha).
+        const diasAtrasoHoy = diasDeAtraso(prestamo.fecha_vencimiento_iso, hoy);
+        const multaPorEjemplarHoy = diasAtrasoHoy * prestamoModel.MULTA_POR_DIA;
+
         res.render('prestamos/devolver', {
             prestamo,
-            detalles
+            detalles,
+            hoy,
+            multaPorDia: prestamoModel.MULTA_POR_DIA,
+            cantidadEjemplares: detalles.length,
+            diasAtrasoHoy,
+            multaPorEjemplarHoy,
+            totalMultaHoy: multaPorEjemplarHoy * detalles.length
         });
 
     } catch (error) {
@@ -415,7 +432,8 @@ const devolver = async (req, res) => {
         const resultado =
             await prestamoModel.devolverPrestamo(
                 id,
-                estadosEjemplares
+                estadosEjemplares,
+                fechaOpcional(req.body.fecha_devolucion)
             );
 
         res.render(
@@ -435,7 +453,12 @@ const devolver = async (req, res) => {
             mensajeParaUsuario(error, 'No se pudo registrar la devolución')
         );
 
-        res.redirect('/prestamos');
+        // Un error de fecha devuelve al formulario para corregirla; el resto, al listado.
+        res.redirect(
+            error.reintentable
+                ? `/prestamos/${req.params.id}/devolver`
+                : '/prestamos'
+        );
     }
 };
 
@@ -463,31 +486,30 @@ const detalle = async (req, res) => {
         const primerResultado =
             resultados[0];
 
-        const totalMulta =
-            resultados.reduce(
-                (total, detalle) => {
-                    return total +
-                        Number(detalle.multa || 0);
-                },
-                0
-            );
-
-        // Los días de atraso y la multa se calculan al devolver: mientras el préstamo está
-        // abierto no hay valores definitivos, así que se muestra un guion en lugar de "$0".
         const devuelto = primerResultado.estado === 'Devuelto';
+        const diasVencido = Number(primerResultado.dias_vencido);
 
+        // Devuelto: valores definitivos guardados al devolver.
+        // Abierto: atraso y multa acumulados al día de hoy (se confirman al devolver).
         const detallesFormateados = resultados.map(item => ({
             ...item,
-            dias_atraso: item.dias_atraso ?? '—',
-            multa: item.multa !== null ? item.multa : '—'
+            dias_atraso: devuelto ? item.dias_atraso : diasVencido,
+            multa: devuelto
+                ? item.multa
+                : diasVencido * prestamoModel.MULTA_POR_DIA
         }));
 
-        const diasVencido = Number(primerResultado.dias_vencido);
+        const totalMulta =
+            detallesFormateados.reduce(
+                (total, detalle) => total + Number(detalle.multa || 0),
+                0
+            );
 
         const avisoAtraso =
             !devuelto && diasVencido > 0
                 ? `Préstamo vencido: lleva ${diasVencido} día${diasVencido === 1 ? '' : 's'} de atraso. ` +
-                  'La multa ($500 por día y por ejemplar) se calcula al registrar la devolución.'
+                  `Si se devuelve hoy, la multa es $${totalMulta.toLocaleString('es-AR')} ` +
+                  `($${prestamoModel.MULTA_POR_DIA} por día y por ejemplar). Se confirma al registrar la devolución.`
                 : null;
 
         res.render(

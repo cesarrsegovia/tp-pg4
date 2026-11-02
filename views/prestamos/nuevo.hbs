@@ -35,6 +35,19 @@
                             </select>
                         </div>
 
+                        <div class="col-md-6">
+                            <label for="fecha_prestamo" class="form-label">Fecha del préstamo</label>
+                            <input type="date" id="fecha_prestamo" name="fecha_prestamo" class="form-control"
+                                value="{{hoy}}" min="{{fechaMinima}}" max="{{hoy}}" required>
+                            <div class="form-text">Por defecto es hoy; no puede ser posterior a hoy.</div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label for="vencimiento" class="form-label">Fecha de vencimiento</label>
+                            <input type="text" id="vencimiento" class="form-control" readonly tabindex="-1">
+                            <div class="form-text">Se calcula sola: 7 días después del préstamo.</div>
+                        </div>
+
                         <div class="col-12">
                             <label for="id_ejemplar_1" class="form-label">Ejemplar 1</label>
                             <select id="id_ejemplar_1" name="id_ejemplar_1" class="form-select" required>
@@ -103,5 +116,24 @@
 
         selectores.forEach(function (s) { s.addEventListener('change', actualizar); });
         actualizar();
+
+        // Vencimiento = fecha del préstamo + 7 días (solo informativo; lo calcula el servidor).
+        var campoFecha = document.getElementById('fecha_prestamo');
+        var campoVencimiento = document.getElementById('vencimiento');
+
+        function mostrarVencimiento() {
+            var partes = campoFecha.value.split('-');
+
+            if (partes.length !== 3) { campoVencimiento.value = ''; return; }
+
+            var d = new Date(Date.UTC(+partes[0], +partes[1] - 1, +partes[2] + 7));
+
+            campoVencimiento.value =
+                ('0' + d.getUTCDate()).slice(-2) + '/' +
+                ('0' + (d.getUTCMonth() + 1)).slice(-2) + '/' + d.getUTCFullYear();
+        }
+
+        campoFecha.addEventListener('input', mostrarVencimiento);
+        mostrarVencimiento();
     })();
 </script>

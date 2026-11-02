@@ -1,5 +1,6 @@
 const pool = require('../config/database');
 const { ErrorNegocio, esIdValido } = require('../utils/errores');
+const { FECHA_MINIMA, esFechaValida } = require('../utils/fechas');
 
 const MAX_PRESTAMOS_ACTIVOS = 3;
 const MAX_EJEMPLARES_POR_PRESTAMO = 3;
@@ -44,13 +45,19 @@ const obtenerEjemplaresDisponibles = async () => {
     return resultado.rows;
 };
 
+// fechaPrestamo (AAAA-MM-DD) es opcional: sin ella se usa el día de hoy.
 const crearPrestamo = async (
     id_socio,
-    ejemplaresSolicitados
+    ejemplaresSolicitados,
+    fechaPrestamo = null
 ) => {
 
     if (!esIdValido(id_socio)) {
         throw new ErrorNegocio('El socio seleccionado no es válido');
+    }
+
+    if (fechaPrestamo !== null && !esFechaValida(fechaPrestamo)) {
+        throw new ErrorNegocio('La fecha de préstamo no es válida', { reintentable: true });
     }
 
     if (!ejemplaresSolicitados.every(esIdValido)) {
@@ -98,6 +105,28 @@ const crearPrestamo = async (
 
             throw new ErrorNegocio(
                 'El socio no está activo'
+            );
+        }
+
+        // La comparación se hace en la base, con su misma noción de "hoy".
+        const resultadoFecha = await client.query(
+            `SELECT
+                COALESCE($1::date, CURRENT_DATE) > CURRENT_DATE AS en_futuro,
+                COALESCE($1::date, CURRENT_DATE) < $2::date AS demasiado_antigua`,
+            [fechaPrestamo, FECHA_MINIMA]
+        );
+
+        if (resultadoFecha.rows[0].en_futuro) {
+            throw new ErrorNegocio(
+                'La fecha de préstamo no puede ser posterior a hoy',
+                { reintentable: true }
+            );
+        }
+
+        if (resultadoFecha.rows[0].demasiado_antigua) {
+            throw new ErrorNegocio(
+                'La fecha de préstamo no puede ser anterior al 01/01/2000',
+                { reintentable: true }
             );
         }
 
@@ -170,9 +199,31 @@ const crearPrestamo = async (
                     'Uno de los ejemplares no está disponible'
                 );
             }
+
+            // Línea de tiempo coherente: un ejemplar no puede prestarse con una fecha
+            // anterior a la de su última devolución.
+            const resultadoUltima = await client.query(
+                `SELECT
+                    TO_CHAR(MAX(prestamos.fecha_devolucion), 'DD/MM/YYYY') AS ultima,
+                    MAX(prestamos.fecha_devolucion) >
+                        COALESCE($2::date, CURRENT_DATE) AS posterior
+                 FROM detalle_prestamo
+                 JOIN prestamos
+                    ON detalle_prestamo.id_prestamo = prestamos.id_prestamo
+                 WHERE detalle_prestamo.id_ejemplar = $1`,
+                [idEjemplar, fechaPrestamo]
+            );
+
+            if (resultadoUltima.rows[0].posterior) {
+                throw new ErrorNegocio(
+                    `El ejemplar fue devuelto el ${resultadoUltima.rows[0].ultima}: ` +
+                    'la fecha de préstamo no puede ser anterior',
+                    { reintentable: true }
+                );
+            }
         };
 
-        //3-crear prestamo
+        //3-crear prestamo (con fecha manual o la de hoy; vence 7 días después)
         const resultadoPrestamo = await client.query(
             `INSERT INTO prestamos (
                 id_socio,
@@ -182,12 +233,16 @@ const crearPrestamo = async (
             )
             VALUES (
                 $1,
-                CURRENT_DATE,
-                CURRENT_DATE + 7,
-                'Activo'
+                COALESCE($2::date, CURRENT_DATE),
+                COALESCE($2::date, CURRENT_DATE) + 7,
+                CASE
+                    WHEN COALESCE($2::date, CURRENT_DATE) + 7 < CURRENT_DATE
+                    THEN 'Vencido'
+                    ELSE 'Activo'
+                END
             )
             RETURNING *`,
-            [id_socio]
+            [id_socio, fechaPrestamo]
         );
 
         const prestamo = resultadoPrestamo.rows[0];
@@ -288,7 +343,9 @@ const obtenerPorId = async (id) => {
             prestamos.id_prestamo,
             prestamos.id_socio,
             prestamos.fecha_prestamo,
+            TO_CHAR(prestamos.fecha_prestamo, 'YYYY-MM-DD') AS fecha_prestamo_iso,
             prestamos.fecha_vencimiento,
+            TO_CHAR(prestamos.fecha_vencimiento, 'YYYY-MM-DD') AS fecha_vencimiento_iso,
             prestamos.fecha_devolucion,
             prestamos.estado,
             socios.nombre,
@@ -303,6 +360,16 @@ const obtenerPorId = async (id) => {
     );
 
     return resultado.rows[0];
+};
+
+// "Hoy" según la base (AAAA-MM-DD): tope de las fechas de los formularios.
+const obtenerFechaActual = async () => {
+
+    const resultado = await pool.query(
+        `SELECT TO_CHAR(CURRENT_DATE, 'YYYY-MM-DD') AS hoy`
+    );
+
+    return resultado.rows[0].hoy;
 };
 
 const obtenerDetalles = async (idPrestamo) => {
@@ -332,7 +399,13 @@ const obtenerDetalles = async (idPrestamo) => {
 };
 
 // estadosEjemplares: { [id_ejemplar]: 'Disponible' | 'Dañado' | 'En mantenimiento' }
-const devolverPrestamo = async (idPrestamo, estadosEjemplares = {}) => {
+// fechaDevolucion (AAAA-MM-DD) es opcional: sin ella se usa el día de hoy. Debe estar
+// entre la fecha de préstamo y hoy; los días de atraso y la multa se calculan con ella.
+const devolverPrestamo = async (idPrestamo, estadosEjemplares = {}, fechaDevolucion = null) => {
+
+    if (fechaDevolucion !== null && !esFechaValida(fechaDevolucion)) {
+        throw new ErrorNegocio('La fecha de devolución no es válida', { reintentable: true });
+    }
 
     // Un estado que no sea Disponible, Dañado o En mantenimiento no se reemplaza en
     // silencio por Disponible: se rechaza la devolución para que el usuario lo corrija.
@@ -360,15 +433,18 @@ const devolverPrestamo = async (idPrestamo, estadosEjemplares = {}) => {
                     id_prestamo,
                     fecha_vencimiento,
                     estado,
-                    CURRENT_DATE AS hoy,
+                    COALESCE($2::date, CURRENT_DATE) AS fecha_devolucion,
+                    COALESCE($2::date, CURRENT_DATE) > CURRENT_DATE AS en_futuro,
+                    COALESCE($2::date, CURRENT_DATE) < fecha_prestamo AS antes_del_prestamo,
+                    TO_CHAR(fecha_prestamo, 'DD/MM/YYYY') AS fecha_prestamo_texto,
                     GREATEST(
-                        CURRENT_DATE - fecha_vencimiento,
+                        COALESCE($2::date, CURRENT_DATE) - fecha_vencimiento,
                         0
                     ) AS dias_atraso
                  FROM prestamos
                  WHERE id_prestamo = $1
                  FOR UPDATE`,
-                [idPrestamo]
+                [idPrestamo, fechaDevolucion]
             );
 
         if (resultadoPrestamo.rows.length === 0) {
@@ -380,6 +456,20 @@ const devolverPrestamo = async (idPrestamo, estadosEjemplares = {}) => {
         // 2. Impedir una segunda devolución
         if (prestamo.estado !== 'Activo' && prestamo.estado !== 'Vencido') {
             throw new ErrorNegocio('El préstamo ya fue devuelto');
+        }
+
+        if (prestamo.en_futuro) {
+            throw new ErrorNegocio(
+                'La fecha de devolución no puede ser posterior a hoy',
+                { reintentable: true }
+            );
+        }
+
+        if (prestamo.antes_del_prestamo) {
+            throw new ErrorNegocio(
+                `La fecha de devolución no puede ser anterior a la fecha de préstamo (${prestamo.fecha_prestamo_texto})`,
+                { reintentable: true }
+            );
         }
 
         // 3. Obtener detalles
@@ -451,16 +541,16 @@ const devolverPrestamo = async (idPrestamo, estadosEjemplares = {}) => {
         await client.query(
             `UPDATE prestamos
              SET
-                fecha_devolucion = CURRENT_DATE,
+                fecha_devolucion = COALESCE($2::date, CURRENT_DATE),
                 estado = 'Devuelto'
              WHERE id_prestamo = $1`,
-            [idPrestamo]
+            [idPrestamo, fechaDevolucion]
         );
 
         await client.query('COMMIT');
 
         return {
-            fechaDevolucion: prestamo.hoy,
+            fechaDevolucion: prestamo.fecha_devolucion,
             fechaVencimiento: prestamo.fecha_vencimiento,
             diasAtraso,
             totalMulta,
@@ -1041,6 +1131,9 @@ const contarConFiltros = async ({
 
 module.exports = {
     MAX_EJEMPLARES_POR_PRESTAMO,
+    MULTA_POR_DIA,
+    FECHA_MINIMA,
+    obtenerFechaActual,
     obtenerSociosActivos,
     obtenerEjemplaresDisponibles,
     crearPrestamo,

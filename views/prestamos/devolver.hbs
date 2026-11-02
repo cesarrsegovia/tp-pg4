@@ -65,6 +65,54 @@
         </div>
     </div>
 
+    <div class="card shadow-sm mb-4 {{#if diasAtrasoHoy}}border-warning{{/if}}" id="resumenAtraso"
+        data-vencimiento="{{prestamo.fecha_vencimiento_iso}}" data-multa="{{multaPorDia}}"
+        data-cantidad="{{cantidadEjemplares}}">
+        <div class="card-header">
+            <h2 class="h5 mb-0"><i class="bi bi-clock-history me-1"></i>Atraso y multa</h2>
+        </div>
+
+        <div class="card-body">
+            <dl class="row mb-2">
+                <dt class="col-sm-5 col-lg-4">Fecha de vencimiento</dt>
+                <dd class="col-sm-7 col-lg-8">{{fecha prestamo.fecha_vencimiento}}</dd>
+
+                <dt class="col-sm-5 col-lg-4">Días de atraso</dt>
+                <dd class="col-sm-7 col-lg-8"><strong id="diasAtraso">{{diasAtrasoHoy}}</strong></dd>
+
+                <dt class="col-sm-5 col-lg-4">Multa por ejemplar</dt>
+                <dd class="col-sm-7 col-lg-8"><span id="multaEjemplar">{{moneda multaPorEjemplarHoy}}</span>
+                    <span class="text-secondary small">(${{multaPorDia}} por día)</span></dd>
+
+                <dt class="col-sm-5 col-lg-4">Total de multa</dt>
+                <dd class="col-sm-7 col-lg-8"><strong id="totalMulta" class="fs-5 {{#if totalMultaHoy}}text-danger{{/if}}">{{moneda totalMultaHoy}}</strong>
+                    <span class="text-secondary small">({{cantidadEjemplares}} ejemplar{{#unless (eq cantidadEjemplares 1)}}es{{/unless}})</span></dd>
+            </dl>
+
+            <div class="form-text">
+                Calculado con la fecha de devolución elegida abajo (hoy por defecto); se confirma al registrar la devolución.
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-4">
+                    <label for="fecha_devolucion" class="form-label">Fecha de devolución</label>
+                    <input type="date" id="fecha_devolucion" name="fecha_devolucion" class="form-control"
+                        value="{{hoy}}" min="{{prestamo.fecha_prestamo_iso}}" max="{{hoy}}" required>
+                </div>
+                <div class="col-md-8">
+                    <div class="form-text mb-0">
+                        Por defecto es hoy. Debe estar entre la fecha de préstamo ({{fecha prestamo.fecha_prestamo}})
+                        y hoy; los días de atraso y la multa se calculan con esta fecha.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="d-flex gap-2">
         <button type="submit" class="btn btn-success">
             <i class="bi bi-box-arrow-in-down me-1"></i>Registrar devolución
@@ -75,3 +123,38 @@
         </a>
     </div>
 </form>
+
+<script>
+    // Recalcula el atraso y la multa al cambiar la fecha de devolución (solo informativo;
+    // el cálculo definitivo lo hace el servidor al registrar la devolución).
+    (function () {
+        var resumen = document.getElementById('resumenAtraso');
+        var campo = document.getElementById('fecha_devolucion');
+
+        function aMs(texto) {
+            var p = texto.split('-');
+            return Date.UTC(+p[0], +p[1] - 1, +p[2]);
+        }
+
+        function pesos(n) { return '$' + n.toLocaleString('es-AR'); }
+
+        function actualizar() {
+            if (!campo.value || campo.value.split('-').length !== 3) { return; }
+
+            var dias = Math.max(0, Math.round((aMs(campo.value) - aMs(resumen.dataset.vencimiento)) / 86400000));
+            var porEjemplar = dias * Number(resumen.dataset.multa);
+            var total = porEjemplar * Number(resumen.dataset.cantidad);
+
+            document.getElementById('diasAtraso').textContent = dias;
+            document.getElementById('multaEjemplar').textContent = pesos(porEjemplar);
+
+            var campoTotal = document.getElementById('totalMulta');
+            campoTotal.textContent = pesos(total);
+            campoTotal.classList.toggle('text-danger', total > 0);
+            resumen.classList.toggle('border-warning', dias > 0);
+        }
+
+        campo.addEventListener('input', actualizar);
+        actualizar();
+    })();
+</script>

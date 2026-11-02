@@ -1,6 +1,6 @@
 // Batería adversarial: fuerza las validaciones y reglas de negocio contra el servidor real
 // (entradas hostiles, límites, concurrencia, devoluciones con atraso, integridad en la BD).
-// Requiere las migraciones aplicadas (incluida la 005). Crea datos con el prefijo "ZZA" y los elimina.
+// Requiere las migraciones aplicadas (incluidas la 005 y la 006). Crea datos con el prefijo "ZZA" y los elimina.
 // Uso (con la aplicación iniciada): node pruebas/reglas.js [auth|socios|catalogos|libros|ejemplares|prestamos|bd|robustez]
 const path = require('path');
 require('../node_modules/dotenv').config({ path: path.join(__dirname, '..', '.env'), quiet: true });
@@ -77,9 +77,10 @@ const prestamoSql = async (idSocio, idsEj, { desde = 0, venc = 7, estado = 'Acti
     }
     return p.rows[0].id_prestamo;
 };
-const prestar = async (idSocio, idsEj) => {
+const prestar = async (idSocio, idsEj, fecha) => {
     const d = { id_socio: idSocio };
     idsEj.forEach((e, i) => { d[`id_ejemplar_${i + 1}`] = e; });
+    if (fecha !== undefined) d.fecha_prestamo = fecha;
     const r = await resultado(await post('/prestamos', d, '/prestamos/nuevo'));
     return r;
 };
@@ -726,7 +727,7 @@ const prestamos = async () => {
     const dpv = await L.obtener(`/prestamos/${pAyer}`);
     const tp = texto(dpv.html);
     chk('V03', 'Baja', 'el detalle de un préstamo vencido sin devolver avisa cuántos días de atraso lleva', /lleva 1 día de atraso/.test(tp), 'no informa el atraso acumulado; la columna queda vacía');
-    chk('V05', 'Baja', 'el detalle de un préstamo aún abierto no muestra "$0" de multa como si ya estuviera calculada', !/\$\s?0(?!\d)/.test(tp), 'muestra $0 de multa en un préstamo que no fue devuelto');
+    chk('V05', 'Baja', 'el detalle de un préstamo vencido muestra la multa acumulada a hoy ($500 por 1 día de atraso)', /\$500/.test(tp) && !/\$\s?0(?!\d)/.test(tp), 'no muestra la multa acumulada');
     const lst = await L.obtener('/prestamos?id_socio=' + sv);
     const txtLista = texto(lst.html);
     chk('V04', 'Baja', 'el listado de préstamos muestra el código de ejemplar y la categoría (JOIN pedido en el punto 8)', /ZZA-\d+-\d+/.test(txtLista) && /ZZA Cat/.test(txtLista), 'solo muestra "Título (Autor)"');
@@ -779,6 +780,167 @@ const prestamos = async () => {
 };
 
 // =====================================================================
+const fechas = async () => {
+    seccion('FECHAS MANUALES DE PRÉSTAMO Y DEVOLUCIÓN');
+    await login();
+    const dia = async (delta) => (await pool.query('SELECT (CURRENT_DATE + $1::int)::text d', [delta])).rows[0].d;
+    const hoy = await dia(0);
+    const ult = async (idSocio) => (await pool.query('SELECT id_prestamo, fecha_prestamo::text fp, fecha_vencimiento::text fv, fecha_devolucion::text fd, estado FROM prestamos WHERE id_socio=$1 ORDER BY id_prestamo DESC LIMIT 1', [idSocio])).rows[0];
+    const devolverEn = async (id, fecha) => {
+        const r = await post(`/prestamos/${id}/devolver`, fecha === undefined ? {} : { fecha_devolucion: fecha }, '/');
+        const p = r.destino ? await L.seguir(r) : { alertas: L.alertas(r.html), html: r.html };
+        return { destino: r.destino, alertas: p.alertas, html: p.html, estado: r.estado };
+    };
+    const detallesDe = async (id) => (await pool.query('SELECT dias_atraso, multa::int multa FROM detalle_prestamo WHERE id_prestamo=$1', [id])).rows;
+    const hayError = (alertas, re) => alertas.some((a) => a.tipo === 'danger' && re.test(a.texto));
+
+    // ----- formularios
+    const form = await L.obtener('/prestamos/nuevo');
+    chk('F01', 'Alta', 'el formulario de préstamo trae el campo fecha con valor y tope = hoy', new RegExp(`name="fecha_prestamo"[^>]*value="${hoy}"[^>]*max="${hoy}"`).test(form.html.replace(/\s+/g, ' ')), '');
+
+    // ----- alta con fecha manual
+    const s1 = await mkSocio(300);
+    const e1 = await mkEj();
+    const r1 = await prestar(s1, [e1], await dia(-10));
+    const p1 = await ult(s1);
+    chk('F02', 'Alta', 'préstamo con fecha de hace 10 días: vencimiento = esa fecha + 7 y queda Vencido', r1.exito && p1.fp === await dia(-10) && p1.fv === await dia(-3) && p1.estado === 'Vencido', JSON.stringify(p1) + r1.mensaje);
+    chk('F03', 'Alta', 'el ejemplar de ese préstamo pasa a Prestado', (await estadoEj(e1)) === 'Prestado');
+    const s2 = await mkSocio(301);
+    const e2 = await mkEj();
+    const r2 = await prestar(s2, [e2], hoy);
+    const p2 = await ult(s2);
+    chk('F04', 'Alta', 'fecha = hoy explícita: vencimiento hoy + 7 y estado Activo', r2.exito && p2.fp === hoy && p2.fv === await dia(7) && p2.estado === 'Activo', JSON.stringify(p2));
+    const s3 = await mkSocio(302);
+    const e3 = await mkEj();
+    const r3 = await prestar(s3, [e3], '');
+    const p3 = await ult(s3);
+    chk('F05', 'Alta', 'fecha vacía: se usa hoy', r3.exito && p3.fp === hoy, JSON.stringify(p3));
+    const e3b = await mkEj();
+    const r3b = await prestar(s3, [e3b], await dia(-7));
+    const p3b = await ult(s3);
+    chk('F06', 'Info', 'fecha de hace 7 días: vence hoy y todavía está Activo (no vencido)', r3b.exito && p3b.fv === hoy && p3b.estado === 'Activo', JSON.stringify(p3b));
+
+    // ----- fechas inválidas
+    const s4 = await mkSocio(303);
+    const e4 = await mkEj();
+    const malas = [
+        ['F10', await dia(1), /posterior a hoy/, 'mañana (futura)'],
+        ['F11', '2999-01-01', /posterior a hoy/, 'año 2999'],
+        ['F12', 'abc', /no es válida/, 'texto "abc"'],
+        ['F13', '2026-02-30', /no es válida/, 'día imposible 2026-02-30'],
+        ['F14', '2026-13-01', /no es válida/, 'mes 13'],
+        ['F15', '1999-12-31', /anterior al 01\/01\/2000/, 'anterior a 2000'],
+        ['F16', '0000-00-00', /no es válida/, '0000-00-00'],
+        ['F17', `${hoy}' OR '1'='1`, /no es válida/, 'intento de inyección SQL']
+    ];
+    for (const [id, valor, re, desc] of malas) {
+        const r = await prestar(s4, [e4], valor);
+        chk(id, 'Alta', `fecha de préstamo ${desc} → rechazada y no crea nada`, r.rechazado && re.test(r.mensaje) && (await nPrestamos(s4)) === 0 && (await estadoEj(e4)) === 'Disponible', r.mensaje + ' | ' + (await nPrestamos(s4)));
+    }
+    const rArr = await resultado(await post('/prestamos', [['id_socio', s4], ['id_ejemplar_1', e4], ['fecha_prestamo', hoy], ['fecha_prestamo', hoy]], '/prestamos/nuevo'));
+    chk('F18', 'Media', 'fecha de préstamo repetida (array) → 400 sin crear nada', rArr.status === 400 && (await nPrestamos(s4)) === 0, `status ${rArr.status}`);
+
+    // ----- coherencia con la última devolución del ejemplar
+    const s5 = await mkSocio(304), s6 = await mkSocio(305);
+    const e5 = await mkEj();
+    const pOld = await prestamoSql(s5, [e5], { desde: 12, venc: 7 });
+    await pool.query("UPDATE prestamos SET estado='Devuelto', fecha_devolucion = CURRENT_DATE - 2 WHERE id_prestamo=$1", [pOld]);
+    await pool.query("UPDATE detalle_prestamo SET prestamo_activo=false, dias_atraso=3, multa=1500 WHERE id_prestamo=$1", [pOld]);
+    await pool.query("UPDATE ejemplares SET estado='Disponible' WHERE id_ejemplar=$1", [e5]);
+    const rAnt = await prestar(s6, [e5], await dia(-5));
+    chk('F20', 'Alta', 'un ejemplar devuelto hace 2 días no puede prestarse con fecha de hace 5 (anterior a su devolución)', rAnt.rechazado && /fue devuelto el/.test(rAnt.mensaje) && (await nPrestamos(s6)) === 0, rAnt.mensaje);
+    const rIgual = await prestar(s6, [e5], await dia(-2));
+    chk('F21', 'Alta', '... pero sí el mismo día en que se devolvió', rIgual.exito, rIgual.mensaje);
+
+    // ----- devoluciones con fecha manual
+    const sd = await mkSocio(310);
+    const [a1, a2] = [await mkEj(), await mkEj()];
+    const pd = await prestamoSql(sd, [a1, a2], { desde: 20, venc: 7 });   // vencía hace 13 días
+    const d1 = await devolverEn(pd, await dia(-14));                  // un día antes del vencimiento
+    const dd = await detallesDe(pd);
+    const fin = await ult(sd);
+    chk('F30', 'Alta', 'devolución con fecha anterior al vencimiento (hace 14 días; vencía hace 13): 0 días de atraso, sin multa', /Devolución registrada/.test(d1.html) && dd.every((x) => x.dias_atraso === 0 && x.multa === 0) && fin.fd === await dia(-14) && fin.estado === 'Devuelto', JSON.stringify(dd) + JSON.stringify(fin));
+
+    const sd3 = await mkSocio(312);
+    const [c1, c2, c3] = [await mkEj(), await mkEj(), await mkEj()];
+    const pd3 = await prestamoSql(sd3, [c1, c2, c3], { desde: 20, venc: 7 });
+    const d3 = await devolverEn(pd3, await dia(-8));
+    // vencía hace 13 días; devuelto hace 8 → 5 días de atraso
+    const dd3 = await detallesDe(pd3);
+    // (nota: dia(-8) es 5 días después del vencimiento dia(-13))
+    chk('F31', 'Alta', 'préstamo vencido hace 13 días devuelto con fecha de hace 8: 5 días de atraso, $2.500 por ejemplar, total $7.500', dd3.every((x) => x.dias_atraso === 5 && x.multa === 2500) && /7\.500/.test(texto(d3.html)), JSON.stringify(dd3));
+    chk('F32', 'Alta', 'la devolución guarda la fecha elegida (no la de hoy)', (await ult(sd3)).fd === await dia(-8), JSON.stringify(await ult(sd3)));
+    chk('F33', 'Alta', 'los ejemplares vuelven a Disponible', (await estadoEj(c1)) === 'Disponible' && (await estadoEj(c3)) === 'Disponible');
+
+    // fecha futura / anterior / inválida
+    const sf = await mkSocio(314);
+    const g1 = await mkEj();
+    const pf = await prestamoSql(sf, [g1], { desde: 5, venc: 7 });
+    const rF = await devolverEn(pf, await dia(1));
+    chk('F40', 'Alta', 'devolución con fecha futura → rechazada, vuelve al formulario y el préstamo sigue abierto', hayError(rF.alertas, /posterior a hoy/) && (await ult(sf)).estado !== 'Devuelto' && (await estadoEj(g1)) === 'Prestado', JSON.stringify(rF.alertas));
+    chk('F41', 'Media', '... y el error lleva de vuelta a la pantalla de devolución', /\/prestamos\/\d+\/devolver$/.test(rF.destino || ''), rF.destino);
+    const rA = await devolverEn(pf, await dia(-6));
+    chk('F42', 'Alta', 'devolución anterior a la fecha de préstamo (hace 5 días) → rechazada con el dato correcto', hayError(rA.alertas, /anterior a la fecha de préstamo \(\d\d\/\d\d\/\d{4}\)/) && (await ult(sf)).estado !== 'Devuelto', JSON.stringify(rA.alertas));
+    for (const [id, v, re] of [['F43', 'abc', /no es válida/], ['F44', '2026-02-30', /no es válida/], ['F45', '1999-01-01', /anterior a la fecha de préstamo/]]) {
+        const r = await devolverEn(pf, v);
+        chk(id, 'Alta', `devolución con fecha "${v}" → rechazada`, hayError(r.alertas, re) && (await ult(sf)).estado !== 'Devuelto', JSON.stringify(r.alertas));
+    }
+    const rOk = await devolverEn(pf, await dia(-5));
+    chk('F46', 'Alta', 'devolución el mismo día del préstamo (límite inferior) → aceptada, 0 días de atraso', /Devolución registrada/.test(rOk.html) && (await ult(sf)).fd === await dia(-5), JSON.stringify(rOk.alertas));
+
+    const sh = await mkSocio(315);
+    const h1 = await mkEj();
+    const ph = await prestamoSql(sh, [h1], { desde: 12, venc: 7 });   // venció hace 5 días
+    const rHoy = await devolverEn(ph, '');
+    const dh = await detallesDe(ph);
+    chk('F47', 'Alta', 'fecha de devolución vacía → hoy (venció hace 5 días: 5 días de atraso, $2.500)', /Devolución registrada/.test(rHoy.html) && dh[0].dias_atraso === 5 && dh[0].multa === 2500 && (await ult(sh)).fd === hoy, JSON.stringify(dh));
+
+    const si = await mkSocio(316);
+    const i1 = await mkEj();
+    const pi2 = await prestamoSql(si, [i1], { desde: 5, venc: 7 });
+    const rHoy2 = await devolverEn(pi2, hoy);
+    chk('F48', 'Alta', 'fecha de devolución = hoy explícita funciona', /Devolución registrada/.test(rHoy2.html) && (await ult(si)).fd === hoy);
+    const rDoble = await devolverEn(pi2, await dia(-1));
+    chk('F49', 'Alta', 'una segunda devolución con otra fecha se sigue rechazando ("ya fue devuelto") y no cambia la fecha guardada', hayError(rDoble.alertas, /ya fue devuelto/) && (await ult(si)).fd === hoy, JSON.stringify(rDoble.alertas));
+
+    // formulario de devolución
+    const sj = await mkSocio(317);
+    const j1 = await mkEj();
+    const pj = await prestamoSql(sj, [j1], { desde: 4, venc: 7 });
+    const fd = await L.obtener(`/prestamos/${pj}/devolver`);
+    chk('F50', 'Media', 'el formulario de devolución tiene el campo fecha con min = fecha de préstamo y max = hoy', new RegExp(`name="fecha_devolucion"[^>]*value="${hoy}"[^>]*min="${await dia(-4)}"[^>]*max="${hoy}"`).test(fd.html.replace(/\s+/g, ' ')), '');
+
+    // la fecha elegida se refleja en detalle e historial
+    const det = await L.obtener(`/prestamos/${pd3}`);
+    const fdTxt = (await dia(-8)).split('-').reverse().join('/');
+    // ----- atraso y multa visibles ANTES de devolver
+    const sk = await mkSocio(318);
+    const [k1, k2] = [await mkEj(), await mkEj()];
+    const pk = await prestamoSql(sk, [k1, k2], { desde: 12, venc: 7 });     // venció hace 5 días
+    await L.obtener('/prestamos');                                            // marca Vencido
+    const tdet = texto((await L.obtener(`/prestamos/${pk}`)).html);
+    chk('F60', 'Alta', 'detalle de un préstamo vencido: avisa 5 días de atraso y la multa a hoy ($5.000 con 2 ejemplares)', /lleva 5 días de atraso/.test(tdet) && /\$5\.000/.test(tdet), tdet.slice(tdet.indexOf('Préstamo vencido'), tdet.indexOf('Préstamo vencido') + 200));
+    chk('F61', 'Alta', 'detalle: cada ejemplar muestra 5 días y $2.500', (tdet.match(/\b5\s+\$2\.500/g) || []).length === 2, tdet.slice(tdet.indexOf('Código'), tdet.indexOf('Código') + 300));
+    const pant = (await L.obtener(`/prestamos/${pk}/devolver`)).html;
+    const pantN = pant.replace(/\s+/g, ' ');
+    chk('F62', 'Alta', 'pantalla Devolver: muestra los 5 días de atraso, $2.500 por ejemplar y $5.000 en total antes de devolver', /id="diasAtraso">5</.test(pantN) && /id="multaEjemplar">\$2\.500</.test(pantN) && /id="totalMulta"[^>]*>\$5\.000</.test(pantN), '');
+    chk('F63', 'Media', 'pantalla Devolver: lleva los datos para recalcular en vivo según la fecha elegida', new RegExp(`data-vencimiento="${await dia(-5)}" data-multa="500" data-cantidad="2"`).test(pantN), '');
+    const sl = await mkSocio(319);
+    const l1 = await mkEj();
+    const pl = await prestamoSql(sl, [l1], { desde: 2, venc: 7 });            // vence en 5 días
+    const tl = texto((await L.obtener(`/prestamos/${pl}`)).html);
+    const pantL = (await L.obtener(`/prestamos/${pl}/devolver`)).html.replace(/\s+/g, ' ');
+    chk('F64', 'Media', 'préstamo en término: sin aviso de atraso, 0 días y $0 (en detalle y en Devolver)', !/lleva \d+ día/.test(tl) && /id="diasAtraso">0</.test(pantL) && /id="totalMulta"[^>]*>\$0</.test(pantL), '');
+    const rk = await devolverEn(pk, undefined);
+    const dk = await detallesDe(pk);
+    chk('F65', 'Alta', 'lo mostrado antes de devolver coincide con lo cobrado al devolver ($2.500 por ejemplar, 5 días)', /Devolución registrada/.test(rk.html) && dk.every((x) => x.dias_atraso === 5 && x.multa === 2500), JSON.stringify(dk));
+    const tdev = texto((await L.obtener(`/prestamos/${pk}`)).html);
+    chk('F66', 'Media', 'ya devuelto: el detalle muestra los valores definitivos y sin el aviso de "lleva N días"', !/lleva \d+ día/.test(tdev) && /\$5\.000/.test(tdev) && !/a hoy; se confirma/.test(tdev), '');
+
+    chk('F51', 'Media', 'el detalle del préstamo muestra la fecha de devolución elegida', texto(det.html).includes(fdTxt), fdTxt);
+};
+
+// =====================================================================
 const bd = async () => {
     seccion('INTEGRIDAD EN LA BASE DE DATOS (SQL directo)');
     const s = await mkSocio(200);
@@ -819,6 +981,12 @@ const bd = async () => {
     const maxSoc = await pool.query('SELECT COUNT(*) n FROM prestamos WHERE id_socio=$1 AND estado IN (\'Activo\',\'Vencido\')', [s]);
     chk('B13', 'Info', 'el límite de 3 préstamos abiertos no está en la BD (solo en la app)', Number(maxSoc.rows[0].n) <= 3, `${maxSoc.rows[0].n} abiertos para el socio por SQL directo`);
     const tz = (await pool.query("SELECT current_setting('TimeZone') tz")).rows[0].tz;
+    r = await intenta("INSERT INTO prestamos (id_socio, fecha_prestamo, fecha_vencimiento, estado) VALUES ($1, CURRENT_DATE + 1, CURRENT_DATE + 8, 'Activo')", [s]);
+    chk('B15', 'Alta', 'la BD rechaza un préstamo con fecha de préstamo futura (migración 006)', !r.ok && r.code === '23514', JSON.stringify(r));
+    r = await intenta('UPDATE prestamos SET fecha_devolucion = fecha_prestamo - 1, estado = \'Devuelto\' WHERE id_prestamo=$1', [pid]);
+    chk('B16', 'Alta', 'la BD rechaza una devolución anterior al préstamo (migración 006)', !r.ok && r.code === '23514', JSON.stringify(r));
+    r = await intenta('UPDATE prestamos SET fecha_devolucion = CURRENT_DATE + 1, estado = \'Devuelto\' WHERE id_prestamo=$1', [pid]);
+    chk('B17', 'Alta', 'la BD rechaza una devolución con fecha futura (migración 006)', !r.ok && r.code === '23514', JSON.stringify(r));
     chk('B14', 'Info', 'zona horaria de la BD = zona del servidor de aplicación (CURRENT_DATE coherente)', tz === Intl.DateTimeFormat().resolvedOptions().timeZone, `BD ${tz} / Node ${Intl.DateTimeFormat().resolvedOptions().timeZone}`);
 };
 
@@ -844,7 +1012,7 @@ const robustez = async () => {
     try {
         await login();
         await prep();
-        const todas = { auth, socios, catalogos, libros, ejemplares, prestamos, bd, robustez };
+        const todas = { auth, socios, catalogos, libros, ejemplares, prestamos, fechas, bd, robustez };
         for (const [nombre, fn] of Object.entries(todas)) {
             if (filtroArea && filtroArea !== nombre) continue;
             try { await fn(); } catch (e) { console.error(`ERROR en ${nombre}:`, e); R.push({ area: nombre, id: 'ERR', sev: 'Alta', desc: 'excepción en la batería: ' + e.message, ok: false, evid: String(e.stack).slice(0, 300) }); }

@@ -1,10 +1,12 @@
 // Error pensado para mostrarse al usuario tal cual (regla de negocio incumplida, dato inválido).
 // Cualquier otro error (de la base de datos, de programación) se registra en el servidor
 // y al usuario se le muestra un mensaje genérico, sin detalles internos.
+// Con { reintentable: true } el usuario vuelve al formulario para corregir el dato.
 class ErrorNegocio extends Error {
-    constructor(mensaje) {
+    constructor(mensaje, { reintentable = false } = {}) {
         super(mensaje);
         this.name = 'ErrorNegocio';
+        this.reintentable = reintentable;
     }
 }
 

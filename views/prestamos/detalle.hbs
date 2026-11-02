@@ -69,11 +69,10 @@
 
     <div class="card-footer d-flex justify-content-between align-items-center">
         <span class="fw-semibold">Total de multa</span>
-        {{#if devuelto}}
-        <span class="fs-5 fw-bold {{#if totalMulta}}text-danger{{/if}}">{{moneda totalMulta}}</span>
-        {{else}}
-        <span class="fs-5 fw-bold text-secondary">— <small class="fw-normal">(se calcula al devolver)</small></span>
-        {{/if}}
+        <span class="fs-5 fw-bold {{#if totalMulta}}text-danger{{/if}}">
+            {{moneda totalMulta}}
+            {{#unless devuelto}}<small class="fw-normal text-secondary">(a hoy; se confirma al devolver)</small>{{/unless}}
+        </span>
     </div>
 </div>
 
