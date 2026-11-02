@@ -3,33 +3,17 @@ const bcrypt = require('bcryptjs');
 const { validationResult } = require('express-validator');
 const usuarioModel = require('../models/usuarioModel');
 
-// El alta de usuarios se usa desde dos lugares: la pantalla interna (con sesión)
-// y el registro público desde el login. Cambian la vista y a dónde se vuelve al terminar.
-const PANTALLA_INTERNA = {
-    vista: 'usuarios/nuevo',
-    exito: '/usuarios/nuevo',
-    errorGeneral: '/usuarios/nuevo',
-    mensajeExito: 'Usuario creado correctamente'
-};
-
-const PANTALLA_PUBLICA = {
-    vista: 'auth/registro',
-    exito: '/login',
-    errorGeneral: '/registro',
-    mensajeExito: 'Cuenta creada correctamente. Ya podés iniciar sesión.'
-};
-
-const fabricarMostrar = ({ vista }) => (req, res) => {
-    res.render(vista, {
+const mostrarFormulario = (req, res) => {
+    res.render('usuarios/nuevo', {
         titulo: 'Nuevo usuario'
     });
 };
 
-const fabricarCrear = ({ vista, exito, errorGeneral, mensajeExito }) => async (req, res) => {
+const crear = async (req, res) => {
     const errores = validationResult(req);
 
     if (!errores.isEmpty()) {
-        return res.status(400).render(vista, {
+        return res.status(400).render('usuarios/nuevo', {
             titulo: 'Nuevo usuario',
             errores: errores.array(),
             datos: {
@@ -50,7 +34,7 @@ const fabricarCrear = ({ vista, exito, errorGeneral, mensajeExito }) => async (r
             await usuarioModel.buscarPorEmail(email);
 
         if (usuarioExistente) {
-            return res.status(409).render(vista, {
+            return res.status(409).render('usuarios/nuevo', {
                 titulo: 'Nuevo usuario',
                 errores: [
                     { msg: 'Ya existe un usuario con ese email' }
@@ -68,12 +52,12 @@ const fabricarCrear = ({ vista, exito, errorGeneral, mensajeExito }) => async (r
             password: passwordHash
         });
 
-        req.flash('success', mensajeExito);
+        req.flash('success', 'Usuario creado correctamente');
 
-        return res.redirect(exito);
+        return res.redirect('/usuarios/nuevo');
     } catch (error) {
         if (error.code === '23505') {
-            return res.status(409).render(vista, {
+            return res.status(409).render('usuarios/nuevo', {
                 titulo: 'Nuevo usuario',
                 errores: [
                     { msg: 'Ya existe un usuario con ese email' }
@@ -89,13 +73,11 @@ const fabricarCrear = ({ vista, exito, errorGeneral, mensajeExito }) => async (r
         console.error(error);
 
         req.flash('error', 'No se pudo crear el usuario');
-        return res.redirect(errorGeneral);
+        return res.redirect('/usuarios/nuevo');
     }
 };
 
 module.exports = {
-    mostrarFormulario: fabricarMostrar(PANTALLA_INTERNA),
-    crear: fabricarCrear(PANTALLA_INTERNA),
-    mostrarRegistro: fabricarMostrar(PANTALLA_PUBLICA),
-    registrar: fabricarCrear(PANTALLA_PUBLICA)
+    mostrarFormulario,
+    crear
 };

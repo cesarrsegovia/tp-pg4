@@ -1,7 +1,7 @@
 # Informe de auditoría: validaciones y lógica de negocio
 
 Sistema de Gestión de Préstamos de Biblioteca — TP Final Programación IV (UTN FRTDF)
-Fecha de la auditoría: 22/10/2026
+Fecha de la auditoría: 22/10/2026 · Última actualización: 02/11/2026
 
 ## 1. Resumen ejecutivo
 
@@ -9,10 +9,14 @@ Se revisó todo el código (modelos, controladores, validadores, rutas, vistas, 
 **forzó el sistema con 284 pruebas adversariales** sobre el servidor real: datos límite, entradas malformadas, ataques simples,
 concurrencia, devoluciones con 0/1/3/30/365 días de atraso e integridad directa en la base.
 
-| | Antes | Después |
+| | Antes de los arreglos | Después (código final, sobre la base de desarrollo) |
 |---|---|---|
-| Suite original (`catalogos` + `entidades`) | 346/346 (sobre datos de la base de desarrollo) | 346/346 |
-| Batería nueva (`pruebas/reglas.js`) | 226/284 (58 fallas) | **284/284** (8 observaciones de diseño informadas como NOTA) |
+| Suite original: `catalogos` | 151/151 | 151/151 |
+| Suite original: `entidades` | 195/195 | 195/195 |
+| Batería nueva `reglas.js` | 226/284 (58 fallas) | **284/284** (8 observaciones de diseño informadas como NOTA) |
+
+Los "antes" se midieron en una copia aislada con los datos de referencia de la base de desarrollo; los "después" se corrieron
+con `npm test` contra la base de desarrollo real, y al terminar los conteos de todas las tablas coincidían con los iniciales (sin restos de prueba).
 
 **Conclusión:** el núcleo de reglas del enunciado ya estaba bien resuelto (límite de 3 préstamos, 7 días, multa $500 por día y
 por ejemplar, estados de ejemplar, doble devolución, integridad referencial, transacciones). Los problemas encontrados estaban
@@ -20,14 +24,15 @@ en los bordes: **1 bug funcional de login, 1 bug de concurrencia (deadlock), 1 r
 (máximo 3 ejemplares), filtración de mensajes internos de PostgreSQL, y varias validaciones incompletas**. Todo lo corregible
 dentro del alcance del TP se corrigió y se verificó.
 
-> **Cómo se probó sin riesgo:** se creó una base aislada `biblioteca_audit` (esquema + semillas) y un servidor en el puerto 3100.
-> **Tu base de desarrollo no se tocó** y la migración 005 **no está aplicada en ella** (ver sección 7). La base aislada se eliminó al terminar.
+> **Cómo se probó:** la auditoría y los arreglos se desarrollaron sobre una base aislada `biblioteca_audit` (esquema + semillas) con
+> un servidor en el puerto 3100, que se eliminó al terminar. Después se aplicó la migración 005 en la base de desarrollo y se corrió
+> `npm test` completo contra ella (sección 7).
 
 ## 2. Cumplimiento del enunciado
 
 | Requisito | Estado | Evidencia |
 |---|---|---|
-| 1. Usuarios: registro, login por email/contraseña, sesión, logout seguro | Cumple (con 1 bug corregido) | A01–A20 |
+| 1. Usuarios: registro, login por email/contraseña, sesión, logout seguro | Cumple (con 1 bug corregido). El registro es una función del panel: solo un usuario con sesión crea nuevas cuentas | A01–A20 |
 | 2. Socios: CRUD, DNI único, email válido, obligatorios, inactivo no presta, máx. 3 | Cumple | S01–S30, P10, P20–P23 |
 | 3. Categorías / autores / editoriales: CRUD, sin duplicados, buscador y paginación | Cumple | CAT/EDI/AUT 01–31 |
 | 4. Libros: validaciones (ISBN único, año ≤ actual, relaciones), buscador por 4 criterios | Cumple | L01–L53 |
@@ -113,7 +118,7 @@ Son decisiones de diseño o endurecimiento fuera del alcance del TP. La batería
 |---|---|---|---|
 | N1 | Media | **Sin límite de intentos de login** (12 intentos fallidos seguidos sin bloqueo). | `express-rate-limit` en `POST /login` (p. ej. 10 intentos / 15 min por IP + email). |
 | N2 | Media | **Credenciales por defecto en el repositorio:** `crearUsuario.js` crea `cesar@biblioteca.com` / `admincesar2026` si faltan `ADMIN_EMAIL`/`ADMIN_PASSWORD`, y las pruebas llevan `admin@biblioteca.com` / `AdminBiblioteca2026!` escritas. | Exigir las variables de entorno (sin valores por defecto) y leer las credenciales de las pruebas del `.env`. |
-| N3 | Media | **Registro público (agregado después a pedido):** la pantalla de login tiene el enlace "Registrate" hacia `/registro`. Cualquiera que se registre obtiene acceso completo al sistema (no hay roles). | Si hace falta distinguir, agregar un rol (admin/bibliotecario) o aprobación por un administrador. |
+| N3 | Info | **El alta de usuarios es solo desde el panel** (decisión del proyecto): `/usuarios/nuevo` exige sesión y no hay registro público; las cuentas iniciales se crean con `crearUsuario.js` (menú de usuario → "Nuevo usuario" para agregar más). Un usuario con sesión tiene acceso completo (no hay roles). | Coherente con el uso previsto. Si más adelante se necesitan permisos distintos, agregar un rol (admin/bibliotecario). |
 | N4 | Info | El **máximo de 3 préstamos abiertos** y la **coherencia ejemplar ↔ préstamo** viven en la aplicación (transacciones), no en la BD: un `INSERT` por SQL directo puede violarlas. | Opcional: triggers. Para el TP, la transacción con bloqueos es suficiente. |
 | N5 | Info | Duplicados que solo difieren en **tildes** ("Cátedra"/"Catedra") se aceptan; el buscador sí ignora tildes. | Decisión de diseño; podría usarse `sin_tildes` en el índice único. |
 | N6 | Info | Contraseñas: solo se exige longitud (12–72), sin complejidad. DNI `00000000` se acepta. | Aceptable para el alcance. |
@@ -131,17 +136,15 @@ Son decisiones de diseño o endurecimiento fuera del alcance del TP. La batería
 - **Vistas:** `prestamos/{nuevo,lista,detalle,historialSocio,historialEjemplar}`, `libros/{nuevo,editar}`, `socios/{nuevo,editar}`, `ejemplares/{nuevo,editar}`.
 - **Otros:** `database/schema.sql`, `README.md`, `package.json` (`npm test` ahora corre las 3 suites), `pruebas/catalogos.js` (3 aserciones 200 → 400).
 
-Los cambios están **sin commitear**; `git diff` muestra todo.
+Todo lo anterior ya está en el commit `a00706a` ("fix validaciones"). Se evaluó además un registro público desde el login y **se descartó**
+por decisión del proyecto: `/registro` no existe (404) y la pantalla de login quedó como antes.
 
-## 7. Pasos para aplicar en tu entorno
+## 7. Estado del entorno
 
-1. Aplicar la migración (verifica antes que no haya datos que la violen; en tu base no los hay):
-   ```bash
-   node database/ejecutar.js database/migracion_005_unicidad_y_checks.sql
-   ```
-2. Reiniciar la aplicación (`npm start`) y correr `npm test` con ella iniciada. La suite `reglas.js` falla en L03/L04/E03/B09/B11
-   si la migración 005 no está aplicada.
-3. Revisar `git diff` y commitear. No hay dependencias nuevas.
+1. **Migración 005 aplicada** en la base de desarrollo (verificado: los 4 índices/restricciones existen; datos intactos). Las migraciones 001–004 ya estaban aplicadas.
+2. `npm test` completo contra la base de desarrollo con el código final: **151/151, 195/195 y 284/284**; sin datos de prueba remanentes.
+3. Sin dependencias nuevas. Si se instala en otra base, aplicar las migraciones en orden (o `npm run db:schema`, que ya incluye la 005).
+4. Pendiente de decisión: N2 (credenciales por defecto en `crearUsuario.js` y en las pruebas, ahora presentes en el historial de git).
 
 ## 8. Cómo repetir la auditoría
 
